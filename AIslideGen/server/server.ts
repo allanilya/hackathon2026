@@ -27,11 +27,12 @@ const systemPrompts: Record<Mode, string> = {
 };
 
 app.post("/api/generate", async (req, res) => {
-  const { input, mode, slideCount, tone } = req.body as {
+  const { input, mode, slideCount, tone, additionalContext } = req.body as {
     input: string;
     mode: Mode;
     slideCount: number;
     tone: string;
+    additionalContext?: string;
   };
 
   if (!input || !mode) {
@@ -46,12 +47,17 @@ Respond ONLY with valid JSON in this exact format:
 
 Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone. Do not include any text outside the JSON.`;
 
+  let userMessage = input;
+  if (additionalContext) {
+    userMessage += `\n\nAdditional context: ${additionalContext}`;
+  }
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4o",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: input },
+        { role: "user", content: userMessage },
       ],
       temperature: 0.7,
     });
