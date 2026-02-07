@@ -5,7 +5,7 @@ import ChatContainer from "./ChatContainer";
 import ChatInput from "./ChatInput";
 import { Button, makeStyles, tokens, Switch } from "@fluentui/react-components";
 import { ArrowReset24Regular } from "@fluentui/react-icons";
-import { insertText } from "../taskpane";
+import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { questions } from "../questions";
 import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone } from "../types";
@@ -315,18 +315,13 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     }, 100);
   }, []);
 
-  const formatSlideText = (slide: GeneratedSlide): string => {
-    const bullets = slide.bullets.map((b) => `\u2022 ${b}`).join("\n");
-    return `${slide.title}\n\n${bullets}`;
-  };
-
   const handleInsertSlide = async (slide: GeneratedSlide) => {
-    await insertText(formatSlideText(slide));
+    await createSlide({ title: slide.title, bullets: slide.bullets });
   };
 
   const handleInsertAll = async () => {
     for (const slide of slides) {
-      await insertText(formatSlideText(slide));
+      await createSlide({ title: slide.title, bullets: slide.bullets });
     }
   };
 
