@@ -12,6 +12,8 @@ import type { Mode } from "./ModeSelector";
 import type { Tone } from "./OptionsRow";
 import type { GeneratedSlide } from "./OutputPreview";
 
+/* global fetch */
+
 interface AppProps {
   title: string;
 }
@@ -34,43 +36,17 @@ const useStyles = makeStyles({
   generateButton: {
     width: "100%",
   },
+  errorText: {
+    color: tokens.colorPaletteRedForeground1,
+    fontSize: tokens.fontSizeBase200,
+    paddingLeft: "16px",
+    paddingRight: "16px",
+    paddingTop: "8px",
+    textAlign: "center" as const,
+  },
 });
 
-function generateMockSlides(input: string, mode: Mode, slideCount: number, _tone: Tone): GeneratedSlide[] {
-  const topic = input.trim().split("\n")[0] || "Untitled";
-
-  const generators: Record<Mode, () => GeneratedSlide[]> = {
-    generate: () =>
-      Array.from({ length: slideCount }, (_, i) => ({
-        title: i === 0 ? topic : `Section ${i}`,
-        bullets:
-          i === 0
-            ? ["Overview of key points", "Agenda for the presentation", `${slideCount} slides total`]
-            : [`Key point ${i}.1 based on your notes`, `Key point ${i}.2 with supporting detail`, `Key point ${i}.3 — actionable takeaway`],
-      })),
-    summarize: () => [
-      { title: "Executive Summary", bullets: ["Core thesis distilled from your text", "3 key findings highlighted", "Recommended next steps"] },
-      { title: "Key Takeaways", bullets: ["Takeaway 1 — most impactful insight", "Takeaway 2 — supporting evidence", "Takeaway 3 — call to action"] },
-    ],
-    compare: () => [
-      { title: `Comparison: ${topic}`, bullets: ["Side-by-side overview", "Criteria for evaluation", "At-a-glance verdict"] },
-      { title: "Detailed Breakdown", bullets: ["Performance & speed", "Ease of use & learning curve", "Ecosystem & community support"] },
-      { title: "Recommendation", bullets: ["Best for teams: Option A", "Best for solo devs: Option B", "Overall winner based on criteria"] },
-    ],
-    proscons: () => [
-      { title: `Pros: ${topic}`, bullets: ["Advantage 1 — high impact", "Advantage 2 — cost effective", "Advantage 3 — scalable"] },
-      { title: `Cons: ${topic}`, bullets: ["Drawback 1 — implementation cost", "Drawback 2 — learning curve", "Drawback 3 — limited flexibility"] },
-      { title: "Verdict", bullets: ["Net positive for most use cases", "Mitigations for top risks", "Recommended with conditions"] },
-    ],
-    research: () => [
-      { title: `Research: ${topic}`, bullets: ["Market size & growth trajectory", "Key players & competitive landscape", "Recent trends (2024-2025)"] },
-      { title: "Key Findings", bullets: ["Finding 1 with data point", "Finding 2 with source reference", "Finding 3 with industry impact"] },
-      { title: "Implications & Next Steps", bullets: ["Strategic opportunity identified", "Risk factors to monitor", "Recommended actions"] },
-    ],
-  };
-
-  return generators[mode]();
-}
+const API_URL = "https://localhost:3001/api/generate";
 
 const App: React.FC<AppProps> = (props: AppProps) => {
   const styles = useStyles();
@@ -81,15 +57,33 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   const [tone, setTone] = useState<Tone>("professional");
   const [generatedSlides, setGeneratedSlides] = useState<GeneratedSlide[]>([]);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
   const handleGenerate = async () => {
     if (!inputText.trim()) return;
     setIsGenerating(true);
-    // Simulate AI processing delay
-    await new Promise((resolve) => setTimeout(resolve, 1200));
-    const slides = generateMockSlides(inputText, mode, slideCount, tone);
-    setGeneratedSlides(slides);
-    setIsGenerating(false);
+    setError("");
+
+    try {
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ input: inputText, mode, slideCount, tone }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+      setGeneratedSlides(data.slides || []);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to generate slides";
+      setError(message);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const formatSlideText = (slide: GeneratedSlide): string => {
@@ -130,6 +124,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           {isGenerating ? "Generating..." : "Generate Slides"}
         </Button>
       </div>
+      {error && <p className={styles.errorText}>{error}</p>}
       <OutputPreview
         slides={generatedSlides}
         onInsertSlide={handleInsertSlide}
