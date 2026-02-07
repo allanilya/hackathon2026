@@ -42,3 +42,12 @@ export interface ConversationState {
   additionalContext: string;
   messages: ChatMessage[];
 }
+
+export interface Conversation {
+  id: string;
+  title: string;
+  state: ConversationState;
+  slides: GeneratedSlide[];
+  selectedValues: Record<string, string>;
+  createdAt: number;
+}
