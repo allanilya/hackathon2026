@@ -3,6 +3,7 @@ import { useReducer, useState, useEffect, useCallback } from "react";
 import Header from "./Header";
 import ChatContainer from "./ChatContainer";
 import ChatInput from "./ChatInput";
+import ConversationSelector from "./ConversationSelector";
 import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowReset24Regular } from "@fluentui/react-icons";
 import { createSlide } from "../taskpane";
@@ -10,7 +11,7 @@ import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
 import { parseUserIntent } from "../utils/intentParser";
-import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone } from "../types";
+import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, Conversation } from "../types";
 
 /* global fetch */
 
@@ -130,12 +131,93 @@ function getPlaceholder(step: ConversationStep): string {
 
 // ── App ──
 
+let convIdCounter = 0;
+function generateConvId(): string {
+  return `conv_${Date.now()}_${++convIdCounter}`;
+}
+
+function deriveConversationTitle(state: ConversationState): string {
+  const firstUserMsg = state.messages.find((m) => m.role === "user");
+  if (firstUserMsg) {
+    const trimmed = firstUserMsg.text.slice(0, 30);
+    return trimmed.length < firstUserMsg.text.length ? `${trimmed}...` : trimmed;
+  }
+  return "New Chat";
+}
+
 const App: React.FC<AppProps> = (props: AppProps) => {
   const styles = useStyles();
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const [isTyping, setIsTyping] = useState(false);
   const [slides, setSlides] = useState<GeneratedSlide[]>([]);
   const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
+
+  // Multi-conversation state
+  const [conversations, setConversations] = useState<Conversation[]>(() => {
+    const id = generateConvId();
+    return [{ id, title: "New Chat", state: initialState, slides: [], selectedValues: {}, createdAt: Date.now() }];
+  });
+  const [activeConversationId, setActiveConversationId] = useState<string>(() => conversations[0].id);
+
+  // Sync current state back to conversations list whenever state/slides/selectedValues change
+  useEffect(() => {
+    setConversations((prev) =>
+      prev.map((c) =>
+        c.id === activeConversationId
+          ? { ...c, state, slides, selectedValues, title: deriveConversationTitle(state) }
+          : c
+      )
+    );
+  }, [state, slides, selectedValues, activeConversationId]);
+
+  const handleSelectConversation = useCallback((id: string) => {
+    // Save current state is already handled by the effect above
+    const target = conversations.find((c) => c.id === id);
+    if (!target || target.id === activeConversationId) return;
+    setActiveConversationId(id);
+    // Restore target conversation state
+    dispatch({ type: "RESET" });
+    setSlides(target.slides);
+    setSelectedValues(target.selectedValues);
+    // Restore full state by dispatching individual actions then replacing messages
+    // We'll use a special restore approach: reset then replay
+    setTimeout(() => {
+      // Restore the full state
+      dispatch({ type: "SET_STEP", step: target.state.step });
+      dispatch({ type: "SET_USER_PROMPT", prompt: target.state.userPrompt });
+      dispatch({ type: "SET_MODE", mode: target.state.mode });
+      dispatch({ type: "SET_SLIDE_COUNT", count: target.state.slideCount });
+      dispatch({ type: "SET_TONE", tone: target.state.tone });
+      dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: target.state.additionalContext });
+      target.state.messages.forEach((msg) => {
+        dispatch({ type: "ADD_MESSAGE", message: msg });
+      });
+    }, 0);
+  }, [conversations, activeConversationId]);
+
+  const handleNewConversation = useCallback(() => {
+    const id = generateConvId();
+    const newConv: Conversation = {
+      id,
+      title: "New Chat",
+      state: initialState,
+      slides: [],
+      selectedValues: {},
+      createdAt: Date.now(),
+    };
+    setConversations((prev) => [newConv, ...prev]);
+    setActiveConversationId(id);
+    dispatch({ type: "RESET" });
+    setSlides([]);
+    setSelectedValues({});
+    setIsTyping(false);
+    setTimeout(() => {
+      const greeting = makeAssistantMessage(
+        "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+      );
+      dispatch({ type: "ADD_MESSAGE", message: greeting });
+    }, 100);
+  }, []);
 
   // Always-on slide detection
   const { currentSlide, totalSlides } = useSlideDetection({
@@ -456,18 +538,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   );
 
   const handleReset = useCallback(() => {
-    dispatch({ type: "RESET" });
-    setSlides([]);
-    setSelectedValues({});
-    setIsTyping(false);
-    // Re-add greeting after reset
-    setTimeout(() => {
-      const greeting = makeAssistantMessage(
-        "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
-      );
-      dispatch({ type: "ADD_MESSAGE", message: greeting });
-    }, 100);
-  }, []);
+    handleNewConversation();
+  }, [handleNewConversation]);
 
   const handleInsertSlide = async (slide: GeneratedSlide) => {
     await createSlide({ title: slide.title, bullets: slide.bullets });
@@ -484,6 +556,12 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   return (
     <div className={styles.root}>
       <Header logo="assets/logo-filled.png" title={props.title} />
+      <ConversationSelector
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
+        onNewConversation={handleNewConversation}
+      />
       <ChatContainer
         messages={state.messages}
         onOptionSelect={handleOptionSelect}
