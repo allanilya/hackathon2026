@@ -9,6 +9,7 @@ import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
+import { parseUserIntent } from "../utils/intentParser";
 import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone } from "../types";
 
 /* global fetch */
@@ -307,10 +308,69 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       const currentStep = state.step;
 
       switch (currentStep) {
-        case "initial":
-          dispatch({ type: "SET_USER_PROMPT", prompt: text });
-          await advanceConversation(currentStep);
+        case "initial": {
+          // Parse user intent from the message
+          const intent = parseUserIntent(text);
+
+          // Set the topic/prompt
+          dispatch({ type: "SET_USER_PROMPT", prompt: intent.topic || text });
+
+          // Auto-set detected values
+          if (intent.slideCount !== undefined) {
+            dispatch({ type: "SET_SLIDE_COUNT", count: intent.slideCount });
+          }
+          if (intent.mode) {
+            dispatch({ type: "SET_MODE", mode: intent.mode });
+          }
+          if (intent.tone) {
+            dispatch({ type: "SET_TONE", tone: intent.tone });
+          }
+
+          // If we have all needed info, skip to generation
+          if (intent.hasAllInfo && intent.slideCount !== undefined && intent.mode && intent.tone) {
+            dispatch({ type: "SET_STEP", step: "generating" });
+            await delay(300);
+            await generateSlides();
+          } else {
+            // Otherwise, ask for missing information
+            // Determine which step to go to next
+            let nextStep: ConversationStep = "mode";
+
+            // Skip mode if already detected
+            if (intent.mode) {
+              nextStep = "slideCount";
+            }
+
+            // Skip slideCount if already detected
+            if (intent.mode && intent.slideCount !== undefined) {
+              nextStep = "tone";
+            }
+
+            // Skip tone if already detected
+            if (intent.mode && intent.slideCount !== undefined && intent.tone) {
+              nextStep = "anything_else";
+            }
+
+            dispatch({ type: "SET_STEP", step: nextStep });
+
+            // Show the next question
+            const questionConfig = questions[nextStep];
+            if (questionConfig) {
+              setIsTyping(true);
+              await delay(400);
+              setIsTyping(false);
+
+              let questionText = questionConfig.text;
+              if (nextStep === "mode") {
+                questionText = `Great! ${questionText}`;
+              }
+
+              const msg = makeAssistantMessage(questionText, questionConfig.options, questionConfig.allowOther);
+              dispatch({ type: "ADD_MESSAGE", message: msg });
+            }
+          }
           break;
+        }
 
         case "mode": {
           const modeValue = (option?.value || "generate") as Mode;
