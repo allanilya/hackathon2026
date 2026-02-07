@@ -13,6 +13,13 @@ export interface ChatOption {
   value: string;
 }
 
+export interface SearchResult {
+  title: string;
+  url: string;
+  snippet: string;
+  source?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
@@ -20,6 +27,7 @@ export interface ChatMessage {
   options?: ChatOption[];
   allowOther?: boolean;
   timestamp: number;
+  searchResults?: SearchResult[];
 }
 
 export type ConversationStep =
@@ -31,7 +39,9 @@ export type ConversationStep =
   | "generating"
   | "complete"
   | "summarize_ask"
-  | "summarize_generating";
+  | "summarize_generating"
+  | "web_search_query"
+  | "web_search_results";
 
 export interface ConversationState {
   step: ConversationStep;

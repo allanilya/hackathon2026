@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import OpenAI from "openai";
 import dotenv from "dotenv";
+import { TavilyClient } from "tavily";
 
 dotenv.config();
 
@@ -10,6 +11,7 @@ app.use(express.json());
 app.use(cors({ origin: "https://localhost:3000" }));
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+const tavilyClient = new TavilyClient({ apiKey: process.env.TAVILY_API_KEY });
 
 type Mode = "generate" | "summarize" | "compare" | "proscons" | "research";
 
@@ -109,6 +111,53 @@ app.post("/api/summarize", async (req, res) => {
     console.error("OpenAI error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
+  }
+});
+
+app.post("/api/search", async (req, res) => {
+  const { query, maxResults = 5 } = req.body as { query: string; maxResults?: number };
+
+  if (!query) {
+    res.status(400).json({ error: "query is required" });
+    return;
+  }
+
+  if (!process.env.TAVILY_API_KEY) {
+    res.status(500).json({ error: "Tavily API not configured. Please set TAVILY_API_KEY in .env file." });
+    return;
+  }
+
+  console.log(`[Tavily] Searching for: "${query}" (max ${maxResults} results)`);
+
+  try {
+    const response = await tavilyClient.search({
+      query,
+      max_results: maxResults,
+      include_answer: false,
+      search_depth: "basic",
+    });
+
+    console.log(`[Tavily] Found ${response.results.length} results`);
+
+    const results = response.results.map((r) => ({
+      title: r.title,
+      url: r.url,
+      snippet: r.content,
+      source: new URL(r.url).hostname,
+    }));
+
+    res.json({ results });
+  } catch (error: unknown) {
+    console.error("[Tavily] Search error:", error);
+
+    // Provide more detailed error information
+    if (error instanceof Error) {
+      console.error("[Tavily] Error message:", error.message);
+      console.error("[Tavily] Error stack:", error.stack);
+    }
+
+    const message = error instanceof Error ? error.message : "Search failed";
+    res.status(500).json({ error: `Tavily search failed: ${message}` });
   }
 });
 
