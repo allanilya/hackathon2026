@@ -19,6 +19,8 @@ import {
   DocumentBulletList24Regular,
   SlideLayout24Regular,
   TextBulletListSquare24Regular,
+  Globe24Regular,
+  Dismiss16Regular,
 } from "@fluentui/react-icons";
 
 interface ChatInputProps {
@@ -28,6 +30,9 @@ interface ChatInputProps {
   currentSlide?: number | null;
   totalSlides?: number | null;
   onSummarize?: () => void;
+  onWebSearch?: () => void;
+  isWebSearchActive?: boolean;
+  onDismissWebSearch?: () => void;
 }
 
 const useStyles = makeStyles({
@@ -66,6 +71,40 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     userSelect: "none",
   },
+  activeIndicatorRow: {
+    display: "flex",
+    paddingLeft: "12px",
+    paddingRight: "12px",
+    paddingTop: "8px",
+    paddingBottom: "4px",
+  },
+  activeIndicatorChip: {
+    display: "inline-flex",
+    alignItems: "center",
+    gap: "6px",
+    backgroundColor: tokens.colorBrandBackground2,
+    color: tokens.colorBrandForeground2,
+    borderRadius: "12px",
+    paddingTop: "4px",
+    paddingBottom: "4px",
+    paddingLeft: "10px",
+    paddingRight: "8px",
+    fontSize: "12px",
+    fontWeight: tokens.fontWeightSemibold,
+  },
+  dismissButton: {
+    minWidth: "16px",
+    width: "16px",
+    height: "16px",
+    padding: "0",
+    cursor: "pointer",
+    border: "none",
+    backgroundColor: "transparent",
+    color: tokens.colorBrandForeground2,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });
 
 const ChatInput: React.FC<ChatInputProps> = ({
@@ -75,6 +114,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   currentSlide,
   totalSlides,
   onSummarize,
+  onWebSearch,
+  isWebSearchActive,
+  onDismissWebSearch,
 }) => {
   const styles = useStyles();
   const [text, setText] = useState("");
@@ -97,6 +139,21 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className={styles.container}>
+      {isWebSearchActive && (
+        <div className={styles.activeIndicatorRow}>
+          <div className={styles.activeIndicatorChip}>
+            <Globe24Regular style={{ width: "14px", height: "14px" }} />
+            <span>Web Search</span>
+            <button
+              className={styles.dismissButton}
+              onClick={onDismissWebSearch}
+              title="Cancel web search"
+            >
+              <Dismiss16Regular />
+            </button>
+          </div>
+        </div>
+      )}
       <div className={styles.inputRow}>
         <Menu>
           <MenuTrigger disableButtonEnhancement>
@@ -110,6 +167,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           </MenuTrigger>
           <MenuPopover>
             <MenuList>
+              <MenuItem icon={<Globe24Regular />} onClick={onWebSearch}>Web Search</MenuItem>
               <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>Summarize</MenuItem>
               <MenuItem icon={<Image24Regular />}>Add Image</MenuItem>
               <MenuItem icon={<DocumentBulletList24Regular />}>Use Template</MenuItem>

@@ -64,7 +64,7 @@ function parseMode(text: string): Mode | undefined {
     return "proscons";
   }
 
-  if (/\b(research|investigate|analyze|analysis|study)\b/.test(lowerText)) {
+  if (/\b(research|investigate|analyze|analysis|study|current|latest|recent|what's happening|situation|developments|news|updates)\b/.test(lowerText)) {
     return "research";
   }
 

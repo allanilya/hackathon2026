@@ -37,14 +37,15 @@
     "openai": "^4.73.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "regenerator-runtime": "^0.14.1"
+    "regenerator-runtime": "^0.14.1",
+    "tavily": "^1.0.2"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.17",
-    "@types/express": "^5.0.0",
     "@babel/core": "^7.24.0",
     "@babel/preset-env": "^7.25.4",
     "@babel/preset-typescript": "^7.23.3",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
     "@types/office-js": "^1.0.377",
     "@types/office-runtime": "^1.0.35",
     "@types/react": "^18.2.64",
