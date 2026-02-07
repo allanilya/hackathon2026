@@ -38,7 +38,8 @@
     "openai": "^4.73.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "regenerator-runtime": "^0.14.1"
+    "regenerator-runtime": "^0.14.1",
+    "tavily": "^1.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
