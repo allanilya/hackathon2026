@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Input,
   Button,
@@ -18,11 +18,14 @@ import {
   Image24Regular,
   DocumentBulletList24Regular,
   SlideLayout24Regular,
+  ArrowUpload24Regular,
   TextBulletListSquare24Regular,
 } from "@fluentui/react-icons";
+import { parseFile } from "../utils/fileParser";
 
 interface ChatInputProps {
   onSend: (text: string) => void;
+  onFileUpload: (fileName: string, extractedText: string) => void;
   disabled: boolean;
   placeholder: string;
   currentSlide?: number | null;
@@ -70,6 +73,7 @@ const useStyles = makeStyles({
 
 const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
+  onFileUpload,
   disabled,
   placeholder,
   currentSlide,
@@ -78,6 +82,29 @@ const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const styles = useStyles();
   const [text, setText] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isParsingFile, setIsParsingFile] = useState(false);
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setIsParsingFile(true);
+    try {
+      const parsed = await parseFile(file);
+      onFileUpload(parsed.fileName, parsed.text);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to parse file.";
+      alert(message);
+    } finally {
+      setIsParsingFile(false);
+    }
+  };
 
   const handleSend = () => {
     const trimmed = text.trim();
@@ -97,6 +124,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div className={styles.container}>
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".txt,.docx"
+        style={{ display: "none" }}
+        onChange={handleFileChange}
+      />
       <div className={styles.inputRow}>
         <Menu>
           <MenuTrigger disableButtonEnhancement>
@@ -105,12 +139,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
               appearance="subtle"
               icon={<Add24Regular />}
               size="small"
-              disabled={disabled}
+              disabled={disabled || isParsingFile}
             />
           </MenuTrigger>
           <MenuPopover>
             <MenuList>
-              <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>Summarize</MenuItem>
+              <MenuItem icon={<ArrowUpload24Regular />} onClick={handleUploadClick}>
+                Upload Notes
+              </MenuItem>
+              <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>
+                Summarize
+              </MenuItem>
               <MenuItem icon={<Image24Regular />}>Add Image</MenuItem>
               <MenuItem icon={<DocumentBulletList24Regular />}>Use Template</MenuItem>
               <MenuItem icon={<SlideLayout24Regular />}>Change Layout</MenuItem>
