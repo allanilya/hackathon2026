@@ -11,7 +11,7 @@ import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
 import { parseUserIntent } from "../utils/intentParser";
-import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult } from "../types";
+import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult, Conversation } from "../types";
 
 /* global fetch */
 
@@ -216,6 +216,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     setSlides([]);
     setSelectedValues({});
     setIsTyping(false);
+    setIsWebSearchMode(false);
     setTimeout(() => {
       const greeting = makeAssistantMessage(
         "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
@@ -728,19 +729,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   );
 
   const handleReset = useCallback(() => {
-    dispatch({ type: "RESET" });
-    setSlides([]);
-    setSelectedValues({});
-    setIsTyping(false);
-    setIsWebSearchMode(false);
-    // Re-add greeting after reset
-    setTimeout(() => {
-      const greeting = makeAssistantMessage(
-        "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
-      );
-      dispatch({ type: "ADD_MESSAGE", message: greeting });
-    }, 100);
-  }, []);
+    handleNewConversation();
+  }, [handleNewConversation]);
 
   const handleInsertSlide = async (slide: GeneratedSlide) => {
     await createSlide({ title: slide.title, bullets: slide.bullets });
