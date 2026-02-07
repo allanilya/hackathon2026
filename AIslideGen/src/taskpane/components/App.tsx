@@ -46,7 +46,7 @@ const useStyles = makeStyles({
   },
 });
 
-const API_URL = "https://localhost:3001/api/generate";
+const API_URL = "/api/generate";
 
 const App: React.FC<AppProps> = (props: AppProps) => {
   const styles = useStyles();
