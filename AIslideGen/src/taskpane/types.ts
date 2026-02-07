@@ -29,7 +29,9 @@ export type ConversationStep =
   | "tone"
   | "anything_else"
   | "generating"
-  | "complete";
+  | "complete"
+  | "summarize_ask"
+  | "summarize_generating";
 
 export interface ConversationState {
   step: ConversationStep;

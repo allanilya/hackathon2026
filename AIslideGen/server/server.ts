@@ -80,6 +80,38 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
   }
 });
 
+app.post("/api/summarize", async (req, res) => {
+  const { input, scope } = req.body as { input: string; scope: string };
+
+  if (!input) {
+    res.status(400).json({ error: "input is required" });
+    return;
+  }
+
+  const systemPrompt =
+    scope === "current_slide"
+      ? "You are a summarization expert. The user will provide the text content of a single presentation slide. Write a clear, concise summary of the slide in 2-3 sentences. Respond with plain text only, no JSON or markdown formatting."
+      : "You are a summarization expert. The user will provide the text content of an entire presentation. Write a clear, concise summary of the whole presentation in a short paragraph (4-6 sentences). Respond with plain text only, no JSON or markdown formatting.";
+
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: input },
+      ],
+      temperature: 0.7,
+    });
+
+    const content = completion.choices[0]?.message?.content || "";
+    res.json({ summary: content.trim() });
+  } catch (error: unknown) {
+    console.error("OpenAI error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
   console.log(`Spark API server running on http://localhost:${PORT}`);

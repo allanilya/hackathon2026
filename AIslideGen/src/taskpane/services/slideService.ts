@@ -114,6 +114,58 @@ export async function getSlideContent(): Promise<SlideContent> {
   });
 }
 
+/**
+ * Extract text content from all slides in the presentation
+ * @returns Promise resolving to an array of SlideContent for each slide
+ */
+export async function getAllSlidesContent(): Promise<SlideContent[]> {
+  return await PowerPoint.run(async (context) => {
+    const allSlides = context.presentation.slides;
+    allSlides.load("items");
+    await context.sync();
+
+    const results: SlideContent[] = [];
+
+    for (const slide of allSlides.items) {
+      const shapes = slide.shapes;
+      shapes.load("items");
+      await context.sync();
+
+      const textContent: string[] = [];
+      let title: string | null = null;
+
+      for (const shape of shapes.items) {
+        try {
+          shape.load("type, name");
+          await context.sync();
+          shape.load("textFrame");
+          await context.sync();
+          const textFrame = shape.textFrame;
+          textFrame.load("textRange");
+          await context.sync();
+          textFrame.textRange.load("text");
+          await context.sync();
+
+          const text = textFrame.textRange.text.trim();
+          if (text) {
+            if (!title && shape.name.toLowerCase().includes("title")) {
+              title = text;
+            } else {
+              textContent.push(text);
+            }
+          }
+        } catch {
+          continue;
+        }
+      }
+
+      results.push({ title, textContent, shapeCount: shapes.items.length });
+    }
+
+    return results;
+  });
+}
+
 // Tracking state
 let isTracking = false;
 let trackingCallback: (() => void) | null = null;

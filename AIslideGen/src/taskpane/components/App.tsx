@@ -7,7 +7,9 @@ import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowReset24Regular } from "@fluentui/react-icons";
 import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
+import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
+import { parseUserIntent } from "../utils/intentParser";
 import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone } from "../types";
 
 /* global fetch */
@@ -115,6 +117,10 @@ function getPlaceholder(step: ConversationStep): string {
       return "Type any additional details, or pick an option above...";
     case "generating":
       return "Generating your slides...";
+    case "summarize_ask":
+      return "Pick an option above...";
+    case "summarize_generating":
+      return "Summarizing...";
     case "complete":
       return "Start a new conversation...";
     default:
@@ -215,6 +221,84 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     }
   }, [state.userPrompt, state.mode, state.slideCount, state.tone, state.additionalContext]);
 
+  const handleSummarize = useCallback(async () => {
+    dispatch({ type: "SET_STEP", step: "summarize_ask" });
+
+    setIsTyping(true);
+    await delay(400);
+    setIsTyping(false);
+
+    const askMsg = makeAssistantMessage(
+      "What would you like me to summarize?",
+      [
+        { label: "Current Slide", value: "current_slide" },
+        { label: "Entire Slideshow", value: "entire_slideshow" },
+      ]
+    );
+    dispatch({ type: "ADD_MESSAGE", message: askMsg });
+  }, []);
+
+  const runSummarize = useCallback(async (scope: "current_slide" | "entire_slideshow") => {
+    dispatch({ type: "SET_STEP", step: "summarize_generating" });
+    setIsTyping(true);
+
+    const genMsg = makeAssistantMessage(
+      scope === "current_slide"
+        ? "Summarizing the current slide..."
+        : "Summarizing the entire slideshow..."
+    );
+    dispatch({ type: "ADD_MESSAGE", message: genMsg });
+
+    try {
+      let contentText: string;
+
+      if (scope === "current_slide") {
+        const content = await getSlideContent();
+        const parts: string[] = [];
+        if (content.title) parts.push(`Title: ${content.title}`);
+        if (content.textContent.length > 0) parts.push(content.textContent.join("\n"));
+        contentText = parts.join("\n") || "No text content found on this slide.";
+      } else {
+        const allContent = await getAllSlidesContent();
+        contentText = allContent
+          .map((slide, i) => {
+            const parts: string[] = [`Slide ${i + 1}:`];
+            if (slide.title) parts.push(`Title: ${slide.title}`);
+            if (slide.textContent.length > 0) parts.push(slide.textContent.join("\n"));
+            return parts.join("\n");
+          })
+          .join("\n\n") || "No text content found in the presentation.";
+      }
+
+      const response = await fetch("/api/summarize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: contentText,
+          scope,
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+      dispatch({ type: "SET_STEP", step: "initial" });
+
+      const summaryMsg = makeAssistantMessage(data.summary || "No summary available.");
+      dispatch({ type: "ADD_MESSAGE", message: summaryMsg });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to generate summary";
+      const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+      dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+      dispatch({ type: "SET_STEP", step: "initial" });
+    } finally {
+      setIsTyping(false);
+    }
+  }, []);
+
   const handleSend = useCallback(
     async (text: string, option?: ChatOption) => {
       // Add user message
@@ -224,10 +308,69 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       const currentStep = state.step;
 
       switch (currentStep) {
-        case "initial":
-          dispatch({ type: "SET_USER_PROMPT", prompt: text });
-          await advanceConversation(currentStep);
+        case "initial": {
+          // Parse user intent from the message
+          const intent = parseUserIntent(text);
+
+          // Set the topic/prompt
+          dispatch({ type: "SET_USER_PROMPT", prompt: intent.topic || text });
+
+          // Auto-set detected values
+          if (intent.slideCount !== undefined) {
+            dispatch({ type: "SET_SLIDE_COUNT", count: intent.slideCount });
+          }
+          if (intent.mode) {
+            dispatch({ type: "SET_MODE", mode: intent.mode });
+          }
+          if (intent.tone) {
+            dispatch({ type: "SET_TONE", tone: intent.tone });
+          }
+
+          // If we have all needed info, skip to generation
+          if (intent.hasAllInfo && intent.slideCount !== undefined && intent.mode && intent.tone) {
+            dispatch({ type: "SET_STEP", step: "generating" });
+            await delay(300);
+            await generateSlides();
+          } else {
+            // Otherwise, ask for missing information
+            // Determine which step to go to next
+            let nextStep: ConversationStep = "mode";
+
+            // Skip mode if already detected
+            if (intent.mode) {
+              nextStep = "slideCount";
+            }
+
+            // Skip slideCount if already detected
+            if (intent.mode && intent.slideCount !== undefined) {
+              nextStep = "tone";
+            }
+
+            // Skip tone if already detected
+            if (intent.mode && intent.slideCount !== undefined && intent.tone) {
+              nextStep = "anything_else";
+            }
+
+            dispatch({ type: "SET_STEP", step: nextStep });
+
+            // Show the next question
+            const questionConfig = questions[nextStep];
+            if (questionConfig) {
+              setIsTyping(true);
+              await delay(400);
+              setIsTyping(false);
+
+              let questionText = questionConfig.text;
+              if (nextStep === "mode") {
+                questionText = `Great! ${questionText}`;
+              }
+
+              const msg = makeAssistantMessage(questionText, questionConfig.options, questionConfig.allowOther);
+              dispatch({ type: "ADD_MESSAGE", message: msg });
+            }
+          }
           break;
+        }
 
         case "mode": {
           const modeValue = (option?.value || "generate") as Mode;
@@ -265,11 +408,17 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
         }
 
+        case "summarize_ask": {
+          const scope = (option?.value || "current_slide") as "current_slide" | "entire_slideshow";
+          await runSummarize(scope);
+          break;
+        }
+
         default:
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides]
+    [state.step, advanceConversation, generateSlides, runSummarize]
   );
 
   const handleOptionSelect = useCallback(
@@ -364,6 +513,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         placeholder={getPlaceholder(state.step)}
         currentSlide={currentSlide}
         totalSlides={totalSlides}
+        onSummarize={handleSummarize}
       />
     </div>
   );

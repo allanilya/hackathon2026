@@ -19,6 +19,7 @@ import {
   DocumentBulletList24Regular,
   SlideLayout24Regular,
   ArrowUpload24Regular,
+  TextBulletListSquare24Regular,
 } from "@fluentui/react-icons";
 import { parseFile } from "../utils/fileParser";
 
@@ -29,6 +30,7 @@ interface ChatInputProps {
   placeholder: string;
   currentSlide?: number | null;
   totalSlides?: number | null;
+  onSummarize?: () => void;
 }
 
 const useStyles = makeStyles({
@@ -76,6 +78,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   placeholder,
   currentSlide,
   totalSlides,
+  onSummarize,
 }) => {
   const styles = useStyles();
   const [text, setText] = useState("");
@@ -143,6 +146,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
             <MenuList>
               <MenuItem icon={<ArrowUpload24Regular />} onClick={handleUploadClick}>
                 Upload Notes
+              </MenuItem>
+              <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>
+                Summarize
               </MenuItem>
               <MenuItem icon={<Image24Regular />}>Add Image</MenuItem>
               <MenuItem icon={<DocumentBulletList24Regular />}>Use Template</MenuItem>
