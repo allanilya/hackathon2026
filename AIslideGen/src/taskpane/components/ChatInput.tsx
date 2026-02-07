@@ -202,7 +202,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           <MenuPopover>
             <MenuList>
               <MenuItem icon={<Globe24Regular />} onClick={onWebSearch}>Web Search</MenuItem>
-              <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>Summarize</MenuItem>
               <MenuItem icon={<ArrowUpload24Regular />} onClick={handleUploadClick}>
                 Upload Notes
               </MenuItem>
