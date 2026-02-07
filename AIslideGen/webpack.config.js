@@ -4,6 +4,9 @@ const devCerts = require("office-addin-dev-certs");
 const CopyWebpackPlugin = require("copy-webpack-plugin");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const webpack = require("webpack");
+const dotenv = require("dotenv");
+
+dotenv.config();
 
 const urlDev = "https://localhost:3000/";
 const urlProd = "https://www.contoso.com/"; // CHANGE THIS TO YOUR PRODUCTION DEPLOYMENT LOCATION
@@ -92,6 +95,10 @@ module.exports = async (env, options) => {
       }),
       new webpack.ProvidePlugin({
         Promise: ["es6-promise", "Promise"],
+      }),
+      new webpack.DefinePlugin({
+        "process.env.SUPABASE_URL": JSON.stringify(process.env.SUPABASE_URL || ""),
+        "process.env.SUPABASE_ANON_KEY": JSON.stringify(process.env.SUPABASE_ANON_KEY || ""),
       }),
     ],
     devServer: {
