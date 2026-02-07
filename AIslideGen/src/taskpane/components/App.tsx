@@ -3,7 +3,7 @@ import { useReducer, useState, useEffect, useCallback } from "react";
 import Header from "./Header";
 import ChatContainer from "./ChatContainer";
 import ChatInput from "./ChatInput";
-import { Button, makeStyles, tokens, Switch } from "@fluentui/react-components";
+import { Button, makeStyles, tokens } from "@fluentui/react-components";
 import { ArrowReset24Regular } from "@fluentui/react-icons";
 import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
@@ -30,17 +30,6 @@ const useStyles = makeStyles({
     paddingBottom: "8px",
     paddingLeft: "12px",
     paddingRight: "12px",
-  },
-  slideToggleRow: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "8px",
-    paddingTop: "8px",
-    paddingBottom: "8px",
-    paddingLeft: "12px",
-    paddingRight: "12px",
-    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
   },
 });
 
@@ -142,12 +131,9 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   const [slides, setSlides] = useState<GeneratedSlide[]>([]);
   const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
 
-  // Slide detection toggle
-  const [showSlideNumber, setShowSlideNumber] = useState<boolean>(false);
-
-  // Use slide detection hook (only active when toggle is enabled)
+  // Always-on slide detection
   const { currentSlide, totalSlides } = useSlideDetection({
-    enabled: showSlideNumber,
+    enabled: true,
   });
 
   // Show initial greeting on mount
@@ -329,19 +315,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
   return (
     <div className={styles.root}>
-      <Header
-        logo="assets/logo-filled.png"
-        title={props.title}
-        currentSlide={currentSlide}
-        totalSlides={totalSlides}
-      />
-      <div className={styles.slideToggleRow}>
-        <Switch
-          checked={showSlideNumber}
-          onChange={(_ev, data) => setShowSlideNumber(data.checked)}
-          label="Track slide"
-        />
-      </div>
+      <Header logo="assets/logo-filled.png" title={props.title} />
       <ChatContainer
         messages={state.messages}
         onOptionSelect={handleOptionSelect}
@@ -368,6 +342,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onSend={(text) => handleSend(text)}
         disabled={inputDisabled}
         placeholder={getPlaceholder(state.step)}
+        currentSlide={currentSlide}
+        totalSlides={totalSlides}
       />
     </div>
   );

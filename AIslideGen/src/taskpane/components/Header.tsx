@@ -4,8 +4,6 @@ import { Image, tokens, makeStyles } from "@fluentui/react-components";
 export interface HeaderProps {
   title: string;
   logo: string;
-  currentSlide?: number | null;
-  totalSlides?: number | null;
 }
 
 const useStyles = makeStyles({
@@ -40,16 +38,10 @@ const useStyles = makeStyles({
     color: tokens.colorNeutralForeground3,
     margin: "0",
   },
-  slideNumber: {
-    fontSize: tokens.fontSizeBase300,
-    color: tokens.colorNeutralForeground2,
-    fontWeight: tokens.fontWeightSemibold,
-    whiteSpace: "nowrap",
-  },
 });
 
 const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
-  const { title, logo, currentSlide, totalSlides } = props;
+  const { title, logo } = props;
   const styles = useStyles();
 
   return (
@@ -61,11 +53,6 @@ const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
           <p className={styles.subtitle}>Ideas to slides, instantly</p>
         </div>
       </div>
-      {currentSlide !== null && currentSlide !== undefined && totalSlides && (
-        <div className={styles.slideNumber}>
-          Slide {currentSlide} / {totalSlides}
-        </div>
-      )}
     </section>
   );
 };
