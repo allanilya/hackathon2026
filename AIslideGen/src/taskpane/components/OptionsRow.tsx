@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Dropdown, Option, SpinButton, Label, makeStyles, tokens } from "@fluentui/react-components";
+import { Dropdown, Option, SpinButton, Label, Switch, makeStyles, tokens } from "@fluentui/react-components";
 import type { SpinButtonChangeEvent, SpinButtonOnChangeData } from "@fluentui/react-components";
 
 export type Tone = "professional" | "casual" | "academic";
@@ -9,6 +9,8 @@ interface OptionsRowProps {
   onSlideCountChange: (count: number) => void;
   tone: Tone;
   onToneChange: (tone: Tone) => void;
+  showSlideNumber?: boolean;
+  onShowSlideNumberChange?: (enabled: boolean) => void;
 }
 
 const useStyles = makeStyles({
@@ -19,6 +21,7 @@ const useStyles = makeStyles({
     paddingRight: "16px",
     paddingTop: "12px",
     alignItems: "end",
+    flexWrap: "wrap",
   },
   field: {
     display: "flex",
@@ -30,10 +33,16 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase200,
     fontWeight: tokens.fontWeightSemibold,
   },
+  switchField: {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    paddingBottom: "4px",
+  },
 });
 
 const OptionsRow: React.FC<OptionsRowProps> = (props: OptionsRowProps) => {
-  const { slideCount, onSlideCountChange, tone, onToneChange } = props;
+  const { slideCount, onSlideCountChange, tone, onToneChange, showSlideNumber, onShowSlideNumberChange } = props;
   const styles = useStyles();
 
   const handleSlideCountChange = (_ev: SpinButtonChangeEvent, data: SpinButtonOnChangeData) => {
@@ -62,6 +71,15 @@ const OptionsRow: React.FC<OptionsRowProps> = (props: OptionsRowProps) => {
           <Option value="academic">Academic</Option>
         </Dropdown>
       </div>
+      {onShowSlideNumberChange && (
+        <div className={styles.switchField}>
+          <Switch
+            checked={showSlideNumber}
+            onChange={(_ev, data) => onShowSlideNumberChange(data.checked)}
+            label="Track slide"
+          />
+        </div>
+      )}
     </div>
   );
 };

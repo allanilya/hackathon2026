@@ -8,6 +8,7 @@ import OutputPreview from "./OutputPreview";
 import { Button, Spinner, makeStyles, tokens } from "@fluentui/react-components";
 import { Sparkle24Filled } from "@fluentui/react-icons";
 import { insertText } from "../taskpane";
+import { useSlideDetection } from "../hooks/useSlideDetection";
 import type { Mode } from "./ModeSelector";
 import type { Tone } from "./OptionsRow";
 import type { GeneratedSlide } from "./OutputPreview";
@@ -59,6 +60,14 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
 
+  // Slide detection toggle
+  const [showSlideNumber, setShowSlideNumber] = useState<boolean>(false);
+
+  // Use slide detection hook (only active when toggle is enabled)
+  const { currentSlide, totalSlides } = useSlideDetection({
+    enabled: showSlideNumber,
+  });
+
   const handleGenerate = async () => {
     if (!inputText.trim()) return;
     setIsGenerating(true);
@@ -103,7 +112,12 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
   return (
     <div className={styles.root}>
-      <Header logo="assets/logo-filled.png" title={props.title} />
+      <Header
+        logo="assets/logo-filled.png"
+        title={props.title}
+        currentSlide={currentSlide}
+        totalSlides={totalSlides}
+      />
       <ModeSelector selectedMode={mode} onModeChange={setMode} />
       <InputArea mode={mode} value={inputText} onChange={setInputText} />
       <OptionsRow
@@ -111,6 +125,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onSlideCountChange={setSlideCount}
         tone={tone}
         onToneChange={setTone}
+        showSlideNumber={showSlideNumber}
+        onShowSlideNumberChange={setShowSlideNumber}
       />
       <div className={styles.generateRow}>
         <Button
