@@ -1,11 +1,7 @@
 import * as React from "react";
 import { Button, Card, CardHeader, Text, makeStyles, tokens } from "@fluentui/react-components";
 import { SlideAdd24Regular, ArrowDownload24Regular } from "@fluentui/react-icons";
-
-export interface GeneratedSlide {
-  title: string;
-  bullets: string[];
-}
+import type { GeneratedSlide } from "../types";
 
 interface OutputPreviewProps {
   slides: GeneratedSlide[];
@@ -54,7 +50,94 @@ const useStyles = makeStyles({
     justifyContent: "flex-end",
     paddingTop: "12px",
   },
+  paragraphContent: {
+    marginTop: "12px",
+    paddingLeft: "4px",
+    paddingRight: "4px",
+  },
+  paragraph: {
+    fontSize: "13px",
+    color: tokens.colorNeutralForeground2,
+    lineHeight: "1.6",
+    marginBottom: "8px",
+    marginTop: "0",
+  },
+  headlineContent: {
+    marginTop: "16px",
+    paddingLeft: "4px",
+    textAlign: "center" as const,
+  },
+  headlineText: {
+    fontSize: "16px",
+    fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
+    lineHeight: "1.4",
+    marginBottom: "4px",
+    marginTop: "0",
+  },
+  headlineSubtext: {
+    fontSize: "13px",
+    color: tokens.colorNeutralForeground2,
+    lineHeight: "1.5",
+    marginTop: "0",
+  },
+  formatBadge: {
+    fontSize: "10px",
+    marginLeft: "8px",
+    paddingTop: "2px",
+    paddingBottom: "2px",
+    paddingLeft: "6px",
+    paddingRight: "6px",
+    borderRadius: "4px",
+    backgroundColor: tokens.colorNeutralBackground4,
+    color: tokens.colorNeutralForeground3,
+    fontWeight: 400,
+  },
 });
+
+function renderSlideContent(
+  slide: GeneratedSlide,
+  styles: ReturnType<typeof useStyles>
+): React.ReactNode {
+  const format = slide.format || "bullets";
+
+  switch (format) {
+    case "numbered":
+      return (
+        <ol className={styles.bulletList} style={{ listStyleType: "decimal" }}>
+          {slide.bullets.map((item, i) => (
+            <li key={i} className={styles.bullet}>{item}</li>
+          ))}
+        </ol>
+      );
+    case "paragraph":
+      return (
+        <div className={styles.paragraphContent}>
+          {slide.bullets.map((para, i) => (
+            <p key={i} className={styles.paragraph}>{para}</p>
+          ))}
+        </div>
+      );
+    case "headline":
+      return (
+        <div className={styles.headlineContent}>
+          <p className={styles.headlineText}>{slide.bullets[0]}</p>
+          {slide.bullets[1] && (
+            <p className={styles.headlineSubtext}>{slide.bullets[1]}</p>
+          )}
+        </div>
+      );
+    case "bullets":
+    default:
+      return (
+        <ul className={styles.bulletList}>
+          {slide.bullets.map((bullet, i) => (
+            <li key={i} className={styles.bullet}>{bullet}</li>
+          ))}
+        </ul>
+      );
+  }
+}
 
 const OutputPreview: React.FC<OutputPreviewProps> = (props: OutputPreviewProps) => {
   const { slides, onInsertSlide, onInsertAll, insertedSlideIndexes } = props;
@@ -93,16 +176,13 @@ const OutputPreview: React.FC<OutputPreviewProps> = (props: OutputPreviewProps) 
                 <Text weight="semibold">
                   {isInserted && "✓ "}
                   {index + 1}. {slide.title}
+                  {slide.format && slide.format !== "bullets" && (
+                    <span className={styles.formatBadge}>{slide.format}</span>
+                  )}
                 </Text>
               }
             />
-            <ul className={styles.bulletList}>
-              {slide.bullets.map((bullet, bIndex) => (
-                <li key={bIndex} className={styles.bullet}>
-                  {bullet}
-                </li>
-              ))}
-            </ul>
+            {renderSlideContent(slide, styles)}
             <div className={styles.cardActions}>
               <Button
                 appearance="subtle"

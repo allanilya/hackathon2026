@@ -42,17 +42,47 @@ function toLangChainMessages(
   return messages;
 }
 
+const FORMAT_GUIDELINES = `
+CONTENT FORMAT - Choose the best "format" for each slide:
+- "bullets": Use for listing discrete items, features, facts, or comparisons. 2-7 bullet points.
+- "numbered": Use for sequential steps, ranked lists, processes, or timelines. 2-7 items.
+- "paragraph": Use for narrative explanations, summaries, conclusions, or contextual overviews. 1-3 entries, each a full paragraph (2-4 sentences).
+- "headline": Use for title/transition slides, section dividers, or impactful single-statement slides. 1-2 entries: a main statement and optionally a subtitle.
+VARIETY: Vary the format across slides for visual interest. Do NOT use the same format for every slide.`;
+
+const FORMAT_EXAMPLES = `
+FORMAT VALUES: "bullets" | "numbered" | "paragraph" | "headline"
+EXAMPLES:
+- Bullets:    { "title": "Key Features", "format": "bullets", "bullets": ["Fast performance", "Easy to use", "Scalable architecture"] }
+- Numbered:   { "title": "Setup Steps", "format": "numbered", "bullets": ["Install the CLI tool", "Configure your environment", "Run the initialization command"] }
+- Paragraph:  { "title": "Executive Summary", "format": "paragraph", "bullets": ["The project achieved a 40% improvement in processing speed. This was driven by the new caching layer and database optimizations.", "Looking ahead, the team plans to focus on horizontal scaling to handle projected traffic increases."] }
+- Headline:   { "title": "The Future of AI", "format": "headline", "bullets": ["Transforming every industry by 2030"] }`;
+
 const systemPrompts: Record<Mode, string> = {
   generate:
-    "You are a presentation expert. Create slides with specific, valuable information - not generic statements. Each slide must contain concrete facts, actionable insights, or specific examples. Use clear titles and 3-5 concise, informative bullet points. Avoid meta-commentary or process descriptions.",
+    `You are a presentation expert. Create slides with specific, valuable information - not generic statements. Each slide must contain concrete facts, actionable insights, or specific examples. Use clear titles. Avoid meta-commentary or process descriptions.
+
+${FORMAT_GUIDELINES}`,
   summarize:
-    "You are a summarization expert. Extract the most important facts, insights, and takeaways from the content. Focus on specific information, key findings, and concrete details. Avoid generic summaries - be specific and informative.",
+    `You are a summarization expert. Extract the most important facts, insights, and takeaways from the content. Focus on specific information, key findings, and concrete details. Avoid generic summaries - be specific and informative.
+
+${FORMAT_GUIDELINES}
+Prefer "paragraph" for narrative summaries, "bullets" for key takeaways, "numbered" for sequential findings.`,
   compare:
-    "You are an analysis expert. Create detailed comparisons with specific differences, concrete examples, and quantifiable metrics where possible. Include factual distinctions, real-world implications, and data-driven insights. Avoid vague comparisons.",
+    `You are an analysis expert. Create detailed comparisons with specific differences, concrete examples, and quantifiable metrics where possible. Include factual distinctions, real-world implications, and data-driven insights. Avoid vague comparisons.
+
+${FORMAT_GUIDELINES}
+Use "bullets" for side-by-side comparison points, "numbered" for ranked differences, "paragraph" for nuanced analysis.`,
   proscons:
-    "You are a critical thinking expert. Provide specific, concrete pros and cons with real examples and evidence. Include factual benefits and drawbacks, not generic observations. Support claims with specifics.",
+    `You are a critical thinking expert. Provide specific, concrete pros and cons with real examples and evidence. Include factual benefits and drawbacks, not generic observations. Support claims with specifics.
+
+${FORMAT_GUIDELINES}
+Use "bullets" for pros and cons lists. Optionally use "paragraph" for an overall assessment slide.`,
   research:
-    "You are a research expert. Extract ONLY information that appears in the provided research sources - do NOT use general knowledge. Focus on CURRENT, SPECIFIC events: exact dates (e.g., 'On Feb 5, 2026...'), recent developments, specific people/places, breaking news, statistics with numbers, and concrete events from the sources. You may use shorthand citations like 'According to [source name]...' or 'Reuters reports...' in bullet points. Prioritize the most recent and newsworthy information. Avoid generic background - focus on what's happening NOW based on the sources.",
+    `You are a research expert. Extract ONLY information that appears in the provided research sources - do NOT use general knowledge. Focus on CURRENT, SPECIFIC events: exact dates (e.g., 'On Feb 5, 2026...'), recent developments, specific people/places, breaking news, statistics with numbers, and concrete events from the sources. You may use shorthand citations like 'According to [source name]...' or 'Reuters reports...' in bullet points. Prioritize the most recent and newsworthy information. Avoid generic background - focus on what's happening NOW based on the sources.
+
+${FORMAT_GUIDELINES}
+Use "numbered" for chronological developments, "bullets" for key findings, "paragraph" for analysis or context.`,
 };
 
 app.post("/api/generate", async (req, res) => {
@@ -75,12 +105,17 @@ app.post("/api/generate", async (req, res) => {
 
   console.log("Generate request - Mode:", mode, "Has research sources:", hasResearchSources);
 
-  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"] }] }`;
+  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+
+${FORMAT_EXAMPLES}`;
   let citationInstructions = "";
 
   if (hasResearchSources && mode === "research") {
     console.log("Including sources in JSON format");
-    jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }`;
+    jsonFormat = `{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }
+
+${FORMAT_EXAMPLES}
+Each slide may also include a "sources" array with full URLs.`;
     citationInstructions = "\n\nIMPORTANT: For each slide that uses information from the research sources, include a 'sources' array with the FULL URLs of the sources used (e.g., ['https://www.nytimes.com/article', 'https://www.reuters.com/news']). Include complete URLs with https:// protocol. If a slide doesn't use any research sources, omit the 'sources' field or set it to an empty array.";
   }
 
@@ -121,12 +156,27 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+
+    // Validate and default format field on each slide
+    const validFormats = ["bullets", "numbered", "paragraph", "headline"];
+    if (parsed.slides) {
+      for (const s of parsed.slides) {
+        if (!s.format || !validFormats.includes(s.format)) {
+          s.format = "bullets";
+        }
+      }
+    }
+
     console.log("Generated slides:", JSON.stringify(parsed, null, 2));
 
     // RAG: Index the generated slides for future retrieval
     if (conversationId && parsed.slides) {
       const slidesSummary = parsed.slides
-        .map((s: any, i: number) => `Slide ${i + 1}: ${s.title} - ${s.bullets.join("; ")}`)
+        .map((s: any, i: number) => {
+          const fmt = s.format || "bullets";
+          const content = fmt === "paragraph" ? s.bullets.join(" ") : s.bullets.join("; ");
+          return `Slide ${i + 1} [${fmt}]: ${s.title} - ${content}`;
+        })
         .join("\n");
       await indexSlides(conversationId, parsed.slides);
       await indexMessage(conversationId, "assistant", slidesSummary, { type: "slide_summary" });
@@ -370,10 +420,14 @@ app.post("/api/analyze-image", async (req, res) => {
     if (text && slideCount) {
       console.log("[Image Analysis] Generating slides from image + text");
       
-      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and 3-5 concise, informative bullet points. Avoid meta-commentary or process descriptions.
+      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and choose the optimal content format for each slide. Avoid meta-commentary or process descriptions.
+
+${FORMAT_GUIDELINES}
 
 Respond ONLY with valid JSON in this exact format:
-{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+
+${FORMAT_EXAMPLES}
 
 Generate exactly ${slideCount} slides. Do not include any text outside the JSON.`;
 
@@ -479,11 +533,11 @@ You will receive the current slide content (shapes with their roles and text) an
 Respond ONLY with valid JSON containing edit instructions. Available operations:
 
 - "change_title": Change the title text. Requires "newText".
-- "replace_content": Replace the entire content/body text. Requires "newText" with bullet points formatted as "• Point 1\\n• Point 2".
+- "replace_content": Replace the entire content/body text. Requires "newText". Format depends on the slide's current layout: bullet slides use "• Point 1\\n• Point 2", numbered slides use "1. Step one\\n2. Step two", paragraph slides use plain prose separated by \\n\\n, headline slides use a single statement.
 - "add_bullets": Add new bullet points. Requires "bulletsToAdd" (array of strings, WITHOUT the bullet character).
 - "remove_bullets": Remove bullet points matching text. Requires "bulletsToRemove" (array of partial text matches to identify which bullets to remove).
 - "restyle": Change visual styling. Requires "target" ("title", "content", or "all") and "style" object with optional: fontSize (number), fontColor (hex string like "#FF0000"), bold (boolean), italic (boolean), backgroundColor (hex string).
-- "rewrite": AI-rewrite of content while keeping the same meaning. Requires "target" ("title" or "content") and "newText". For content, format as "• Point 1\\n• Point 2".
+- "rewrite": AI-rewrite of content while keeping the same meaning. Requires "target" ("title" or "content") and "newText". Preserve the original format style (bullets use "• ", numbered use "1. ", paragraphs use prose, headlines use a single statement).
 - "delete_slide": Delete the entire slide. No additional fields needed.
 
 Respond ONLY with valid JSON in this format:

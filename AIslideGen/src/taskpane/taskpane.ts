@@ -1,6 +1,6 @@
 /* global PowerPoint console */
 
-import type { EditInstruction } from "./types";
+import type { EditInstruction, SlideFormat } from "./types";
 
 export type SlideTheme = "professional" | "casual" | "academic" | "creative" | "minimal";
 
@@ -18,6 +18,7 @@ export interface SlideData {
   bullets: string[];
   sources?: string[];
   theme?: SlideTheme;
+  format?: SlideFormat;
   layout?: SlideLayout;
 }
 
@@ -152,7 +153,7 @@ export async function createSlide(slideData: SlideData) {
         accentBar.lineFormat.visible = false;
       }
 
-      // Render content based on layout
+// Render content based on layout
       switch (layout) {
         case "title-only":
           // Large centered title only
@@ -282,7 +283,7 @@ export async function createSlide(slideData: SlideData) {
 
         case "title-content":
         default:
-          // Default layout: Title + content bullets
+          // Add title text box (created last so it appears on top)
           const titleBox = newSlide.shapes.addTextBox(slideData.title);
           titleBox.left = theme === "minimal" ? 50 : 70;
           titleBox.top = theme === "creative" ? 40 : 50;
@@ -294,19 +295,49 @@ export async function createSlide(slideData: SlideData) {
           titleBox.fill.clear();
           titleBox.lineFormat.visible = false;
 
-          // Create bullet points in a text box
-          const bulletText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
-          const contentBox = newSlide.shapes.addTextBox(bulletText);
+          // Build content text based on slide format
+          const format = slideData.format || "bullets";
+          let contentText: string;
+          let contentFontSize: number = style.contentSize;
 
-          // Position and size the content box based on theme
-          contentBox.left = theme === "minimal" ? 50 : 70;
-          contentBox.top = theme === "creative" ? 140 : 150;
-          contentBox.width = 640;
-          contentBox.height = slideData.sources ? 300 : 350;
+          switch (format) {
+            case "numbered":
+              contentText = slideData.bullets.map((item, i) => `${i + 1}. ${item}`).join("\n");
+              break;
+            case "paragraph":
+              contentText = slideData.bullets.join("\n\n");
+              break;
+            case "headline":
+              contentText = slideData.bullets[0] || "";
+              contentFontSize = Math.min(style.contentSize + 8, 28);
+              break;
+            case "bullets":
+            default:
+              contentText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
+              break;
+          }
+
+          const contentBox = newSlide.shapes.addTextBox(contentText);
+
+          // Position and size the content box based on theme and format
+          if (format === "headline") {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = 200;
+            contentBox.width = 640;
+            contentBox.height = 200;
+          } else {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = theme === "creative" ? 140 : 150;
+            contentBox.width = 640;
+            contentBox.height = slideData.sources ? 300 : 350;
+          }
 
           // Style the content box
-          contentBox.textFrame.textRange.font.size = style.contentSize;
-          contentBox.textFrame.textRange.font.color = style.contentColor;
+          contentBox.textFrame.textRange.font.size = contentFontSize;
+          contentBox.textFrame.textRange.font.color = format === "headline" ? style.titleColor : style.contentColor;
+          if (format === "headline") {
+            contentBox.textFrame.textRange.font.bold = true;
+          }
           contentBox.fill.clear();
           contentBox.lineFormat.visible = false;
           break;
@@ -472,8 +503,20 @@ async function addBulletsToContent(bullets: string[]): Promise<void> {
           await context.sync();
 
           const currentText = textFrame.textRange.text;
-          const newBullets = bullets.map((b) => `\u2022 ${b}`).join("\n");
-          textFrame.textRange.text = currentText + "\n" + newBullets;
+
+          // Detect existing format from current text
+          const isNumbered = /^\d+\.\s/.test(currentText.trim());
+          let newContent: string;
+          if (isNumbered) {
+            const existingCount = currentText.split("\n").filter(l => /^\d+\.\s/.test(l.trim())).length;
+            newContent = bullets.map((b, i) => `${existingCount + i + 1}. ${b}`).join("\n");
+          } else if (/^[\u2022\-\*]\s/.test(currentText.trim())) {
+            newContent = bullets.map((b) => `\u2022 ${b}`).join("\n");
+          } else {
+            newContent = bullets.join("\n\n");
+          }
+
+          textFrame.textRange.text = currentText + "\n" + newContent;
           await context.sync();
           return;
         }

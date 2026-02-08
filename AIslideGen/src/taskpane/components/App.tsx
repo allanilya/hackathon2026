@@ -1751,23 +1751,27 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   }, [persistMessage]);
 
   const handleInsertSlide = async (slide: GeneratedSlide) => {
+
     await createSlide({
       title: slide.title,
       bullets: slide.bullets,
       sources: slide.sources,
       theme: state.tone as SlideTheme,
-      layout: state.layout as SlideLayout
+      layout: state.layout as SlideLayout,
+      format: slide.format
     });
   };
 
   const handleInsertAll = async () => {
     for (const slide of slides) {
+
       await createSlide({
         title: slide.title,
         bullets: slide.bullets,
         sources: slide.sources,
         theme: state.tone as SlideTheme,
-        layout: state.layout as SlideLayout
+        layout: state.layout as SlideLayout,
+        format: slide.format
       });
     }
   };
