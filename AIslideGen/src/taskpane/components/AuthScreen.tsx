@@ -96,8 +96,8 @@ const AuthScreen: React.FC = () => {
 
   return (
     <div className={styles.root}>
-      <Image className={styles.logo} width="48" height="48" src="assets/logo-filled.png" alt="Spark" />
-      <h1 className={styles.title}>Spark</h1>
+      <Image className={styles.logo} width="48" height="48" src="assets/logo-filled.png" alt="Slider" />
+      <h1 className={styles.title}>Slider</h1>
       <p className={styles.subtitle}>
         {isSignUp ? "Create your account" : "Sign in to continue"}
       </p>
