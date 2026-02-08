@@ -489,22 +489,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     [user, activeConversationId]
   );
 
-  // Stub function for editing slides - to be implemented
-  const runEditSlide = useCallback(async (_text: string) => {
-    const errorMsg = makeAssistantMessage("Slide editing feature is not yet implemented. Please use the slide generation feature instead.");
-    dispatch({ type: "ADD_MESSAGE", message: errorMsg });
-    persistMessage(errorMsg);
-    dispatch({ type: "SET_STEP", step: "initial" });
-  }, [persistMessage]);
-
-  // Stub function for fetching articles - to be implemented
-  const runArticleFetch = useCallback(async (_text: string, _url: string) => {
-    const errorMsg = makeAssistantMessage("Article fetching feature is not yet implemented. Please paste the article content directly.");
-    dispatch({ type: "ADD_MESSAGE", message: errorMsg });
-    persistMessage(errorMsg);
-    dispatch({ type: "SET_STEP", step: "initial" });
-  }, [persistMessage]);
-
   const advanceConversation = useCallback(
     async (currentStep: ConversationStep) => {
       const next = nextStep(currentStep);
