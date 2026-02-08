@@ -448,9 +448,10 @@ app.post("/api/analyze-image", async (req, res) => {
 
     const result = JSON.parse(jsonMatch[0]);
 
-    // If embedMode, add image reference (by ID, not base64) to each slide
+    // If embedMode, add image data to slides
     if (embedMode && result.slides) {
-      const image_id = req.body.image_id || `img_${Date.now()}`;
+      const image_id = req.body.image_id;
+      const hasValidImageId = image_id && typeof image_id === 'string' && image_id.startsWith('img_');
 
       result.slides = result.slides.map((slide: any, index: number) => {
         // If GPT-4 didn't provide imageLayout, calculate a default one
@@ -459,15 +460,31 @@ app.post("/api/analyze-image", async (req, res) => {
           slide.imageLayout = calculateDefaultImageLayout(index);
         }
 
-        return {
-          ...slide,
-          images: [{
-            image_id: image_id,
-            role: "primary",
-            alt_text: slide.title || "Presentation image"
-          }],
-          imageLayout: slide.imageLayout  // Keep for positioning
-        };
+        // If we have a valid uploaded image_id, use new architecture
+        if (hasValidImageId) {
+          console.log(`[Image Analysis] Using Supabase image ID: ${image_id}`);
+          return {
+            ...slide,
+            images: [{
+              image_id: image_id,
+              role: "primary",
+              alt_text: slide.title || "Presentation image"
+            }],
+            imageLayout: slide.imageLayout
+          };
+        } else {
+          // Fall back to legacy format (full base64 in each slide)
+          console.log(`[Image Analysis] No valid image_id, using legacy base64 format`);
+          return {
+            ...slide,
+            image: {
+              fileName: "uploaded-image",
+              base64: image.base64,
+              mimeType: image.mimeType,
+            },
+            imageLayout: slide.imageLayout
+          };
+        }
       });
     }
 

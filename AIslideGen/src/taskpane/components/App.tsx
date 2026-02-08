@@ -601,10 +601,73 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
     try {
       let response;
+      let modifiedData: any = null; // Track if we already parsed and modified the response
+      const hasTextContext = !!(state.userPrompt || state.additionalContext);
 
-      // If image provided with embedMode, use image analysis endpoint
-      if (state.image && state.embedMode !== undefined) {
-        const imageWithId = state.image as any; // May have uploadedImageId
+      // Decision logic for image handling:
+      // 1. If user provides text context + image → Use text generation (don't analyze image)
+      // 2. If user has image but NO text context → Analyze image content
+      // 3. If no image → Normal text generation
+
+      if (state.image && state.embedMode && hasTextContext) {
+        // User wants to embed image with specific text context
+        // Use text-based generation, then add image reference to slides
+        const imageWithId = state.image as any;
+        const textInput = state.userPrompt || state.additionalContext || "Create slides with this image";
+
+        response = await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            input: textInput,
+            mode: state.mode || "generate",
+            slideCount: state.slideCount,
+            tone: state.tone,
+            additionalContext: state.userPrompt ? state.additionalContext : undefined,
+            conversationHistory,
+            conversationId: activeConversationId,
+          }),
+        });
+
+        // After getting slides, add image reference to them
+        if (response.ok) {
+          modifiedData = await response.json();
+          console.log("[generateSlides] Original slides from API:", modifiedData.slides);
+
+          if (modifiedData.slides && imageWithId.uploadedImageId) {
+            console.log("[generateSlides] Adding image reference with ID:", imageWithId.uploadedImageId);
+            // Add image reference to all slides
+            modifiedData.slides = modifiedData.slides.map((slide: any, index: number) => ({
+              ...slide,
+              images: [{
+                image_id: imageWithId.uploadedImageId,
+                role: "primary",
+                alt_text: slide.title || "Presentation image"
+              }],
+              imageLayout: {
+                position: index % 2 === 0 ? "left" : "right",
+                width: 35,
+                height: 50
+              }
+            }));
+            console.log("[generateSlides] Modified slides with image:", modifiedData.slides);
+          } else if (modifiedData.slides) {
+            console.log("[generateSlides] Adding legacy image data (no uploadedImageId)");
+            // Fallback: Add legacy image data if no uploadedImageId
+            modifiedData.slides = modifiedData.slides.map((slide: any, index: number) => ({
+              ...slide,
+              image: state.image,
+              imageLayout: {
+                position: index % 2 === 0 ? "left" : "right",
+                width: 35,
+                height: 50
+              }
+            }));
+          }
+        }
+      } else if (state.image && state.embedMode !== undefined) {
+        // User wants image analysis (no text context, or analyze-only mode)
+        const imageWithId = state.image as any;
 
         response = await fetch("/api/analyze-image", {
           method: "POST",
@@ -614,7 +677,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
               base64: state.image.base64,
               mimeType: state.image.mimeType,
             },
-            image_id: imageWithId.uploadedImageId, // Pass the Supabase image ID
+            image_id: imageWithId.uploadedImageId,
             text: state.userPrompt || state.additionalContext,
             slideCount: state.slideCount,
             embedMode: state.embedMode,
@@ -622,7 +685,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           }),
         });
       } else {
-        // Normal text generation
+        // Normal text generation (no image)
         response = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -636,7 +699,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
               : state.additionalContext,
             conversationHistory,
             conversationId: activeConversationId,
-            image: state.image ? { base64: state.image.base64, mimeType: state.image.mimeType } : undefined,
           }),
         });
       }
@@ -646,7 +708,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         throw new Error(errBody.error || `Server error (${response.status})`);
       }
 
-      const data = await response.json();
+      // Use modifiedData if we already parsed and modified the response, otherwise parse now
+      const data = modifiedData || await response.json();
       const generatedSlides = data.slides || [];
       setSlides(generatedSlides);
       dispatch({ type: "SET_STEP", step: "complete" });

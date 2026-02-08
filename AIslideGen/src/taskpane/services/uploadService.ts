@@ -19,7 +19,7 @@ export async function uploadImage(
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("User not authenticated");
 
-  const uploadId = `img_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  const uploadId = `img_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 
   // Determine file details
   let fileName: string;
@@ -58,7 +58,7 @@ export async function uploadImage(
     throw new Error(`Failed to upload image: ${storageError.message}`);
   }
 
-  // Create database record
+  // Create database record (matching actual schema: TEXT id with size_bytes)
   const uploadRecord = {
     id: uploadId,
     conversation_id: conversationId,
