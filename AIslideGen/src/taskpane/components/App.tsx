@@ -1603,9 +1603,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             dispatch({ type: "ADD_MESSAGE", message: greetingMsg });
             await persistMessage(greetingMsg);
           } else {
-            // Treat as a new request - reset to initial and re-process
-            dispatch({ type: "SET_STEP", step: "initial" });
-            await handleSend(text);
+            // Treat any unrecognized request in edit context as an edit
+            await runEditSlide(text);
           }
           break;
         }

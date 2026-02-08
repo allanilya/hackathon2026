@@ -197,7 +197,7 @@ export function isEditRequest(text: string): boolean {
   const lowerText = text.toLowerCase();
 
   // Edit verbs + slide/content targets
-  const editVerbs = /\b(add|edit|change|modify|update|fix|replace|remove|delete|restyle|rewrite|revise|tweak|adjust|rephrase)\b/;
+  const editVerbs = /\b(add|edit|change|modify|update|fix|replace|remove|delete|clear|wipe|empty|restyle|rewrite|revise|tweak|adjust|rephrase)\b/;
   const slideTargets = /\b(slide|title|bullet|content|text|heading|point|background|font|color|style|this slide|current slide)\b/;
 
   if (editVerbs.test(lowerText) && slideTargets.test(lowerText)) {
