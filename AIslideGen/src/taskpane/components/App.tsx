@@ -7,7 +7,7 @@ import ConversationSelector from "./ConversationSelector";
 import AuthScreen from "./AuthScreen";
 import { Button, makeStyles, tokens, Spinner } from "@fluentui/react-components";
 import { ArrowReset24Regular } from "@fluentui/react-icons";
-import { createSlide } from "../taskpane";
+import { createSlide, SlideTheme } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
@@ -915,13 +915,18 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     handleNewConversation();
   }, [handleNewConversation]);
 
+  const handleThemeChange = useCallback((theme: SlideTheme) => {
+    // Map SlideTheme to Tone (they're compatible)
+    dispatch({ type: "SET_TONE", tone: theme as Tone });
+  }, []);
+
   const handleInsertSlide = async (slide: GeneratedSlide) => {
-    await createSlide({ title: slide.title, bullets: slide.bullets });
+    await createSlide({ title: slide.title, bullets: slide.bullets, theme: state.tone as SlideTheme });
   };
 
   const handleInsertAll = async () => {
     for (const slide of slides) {
-      await createSlide({ title: slide.title, bullets: slide.bullets });
+      await createSlide({ title: slide.title, bullets: slide.bullets, theme: state.tone as SlideTheme });
     }
   };
 
@@ -991,6 +996,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onWebSearch={handleWebSearch}
         isWebSearchActive={isWebSearchMode}
         onDismissWebSearch={handleDismissWebSearch}
+        selectedTheme={state.tone as SlideTheme}
+        onThemeChange={handleThemeChange}
       />
     </div>
   );
