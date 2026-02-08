@@ -25,6 +25,7 @@ import {
   PaintBrush24Regular,
 } from "@fluentui/react-icons";
 import { parseFile } from "../utils/fileParser";
+import { processImage, ImageData } from "../utils/imageHandler";
 import type { SlideTheme } from "../taskpane";
 
 const themeLabels: Record<SlideTheme, string> = {
@@ -38,6 +39,7 @@ const themeLabels: Record<SlideTheme, string> = {
 interface ChatInputProps {
   onSend: (text: string) => void;
   onFileUpload: (fileName: string, extractedText: string) => void;
+  onImageUpload: (imageData: ImageData) => void;
   disabled: boolean;
   placeholder: string;
   currentSlide?: number | null;
@@ -126,6 +128,7 @@ const useStyles = makeStyles({
 const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   onFileUpload,
+  onImageUpload,
   disabled,
   placeholder,
   currentSlide,
@@ -140,10 +143,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const styles = useStyles();
   const [text, setText] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleImageUploadClick = () => {
+    imageInputRef.current?.click();
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -157,6 +165,23 @@ const ChatInput: React.FC<ChatInputProps> = ({
       onFileUpload(parsed.fileName, parsed.text);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to parse file.";
+      alert(message);
+    } finally {
+      setIsParsingFile(false);
+    }
+  };
+
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = "";
+
+    setIsParsingFile(true);
+    try {
+      const imageData = await processImage(file);
+      onImageUpload(imageData);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to process image.";
       alert(message);
     } finally {
       setIsParsingFile(false);
@@ -215,6 +240,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
         style={{ display: "none" }}
         onChange={handleFileChange}
       />
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+        style={{ display: "none" }}
+        onChange={handleImageChange}
+      />
       <div className={styles.inputRow}>
         <Menu>
           <MenuTrigger disableButtonEnhancement>
@@ -257,7 +289,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
               <MenuItem icon={<TextBulletListSquare24Regular />} onClick={onSummarize}>
                 Summarize
               </MenuItem>
-              <MenuItem icon={<Image24Regular />}>Add Image</MenuItem>
+              <MenuItem icon={<Image24Regular />} onClick={handleImageUploadClick}>
+                Add Image
+              </MenuItem>
               <MenuItem icon={<DocumentBulletList24Regular />}>Use Template</MenuItem>
               <MenuItem icon={<SlideLayout24Regular />}>Change Layout</MenuItem>
             </MenuList>
