@@ -44,11 +44,26 @@ export async function indexMessage(
  */
 export async function indexSlides(
   conversationId: string,
-  slides: Array<{ title: string; bullets: string[]; sources?: string[] }>
+  slides: Array<{ title: string; bullets: string[]; sources?: string[]; format?: string }>
 ): Promise<void> {
   const store = getStore(conversationId);
   const docs = slides.map((slide, index) => {
-    const text = `Slide ${index + 1}: ${slide.title}\n${slide.bullets.map((b) => `- ${b}`).join("\n")}${
+    const format = slide.format || "bullets";
+    let contentText: string;
+    switch (format) {
+      case "paragraph":
+        contentText = slide.bullets.join(" ");
+        break;
+      case "headline":
+        contentText = slide.bullets.join(" — ");
+        break;
+      case "numbered":
+        contentText = slide.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n");
+        break;
+      default:
+        contentText = slide.bullets.map((b) => `- ${b}`).join("\n");
+    }
+    const text = `Slide ${index + 1} [${format}]: ${slide.title}\n${contentText}${
       slide.sources?.length ? `\nSources: ${slide.sources.join(", ")}` : ""
     }`;
     return new Document({

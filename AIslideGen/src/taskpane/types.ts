@@ -1,10 +1,13 @@
 export type Mode = "generate" | "summarize" | "compare" | "proscons" | "research";
 export type Tone = "professional" | "casual" | "academic";
 
+export type SlideFormat = "bullets" | "numbered" | "paragraph" | "headline";
+
 export interface GeneratedSlide {
   title: string;
   bullets: string[];
   sources?: string[];
+  format?: SlideFormat;
 }
 
 export type ChatMessageRole = "assistant" | "user";
