@@ -12,6 +12,7 @@ import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
 import { parseUserIntent } from "../utils/intentParser";
+import { getOrCreateDocumentId } from "../utils/documentId";
 import { useAuth } from "../contexts/AuthContext";
 import {
   fetchConversations,
@@ -184,6 +185,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   // Multi-conversation state
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string>("");
+  const [documentId, setDocumentId] = useState<string>("");
 
   // Ref to track whether we should persist (skip during initial load)
   const isRestoringRef = useRef(false);
@@ -204,12 +206,20 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     async function load() {
       setLoadingConversations(true);
       try {
-        const convs = await fetchConversations(user.id);
+        // Get the unique ID for this PowerPoint document
+        const docId = await getOrCreateDocumentId();
+        setDocumentId(docId);
+        console.log(`[Document ID] ${docId}`);
+
+        // Fetch conversations scoped to this specific document
+        const convs = await fetchConversations(user.id, docId);
+        console.log(`[Session Restore] Loaded ${convs.length} conversations for this document`);
 
         if (cancelled) return;
 
         if (convs.length === 0) {
-          // Create a fresh conversation
+          console.log("[Session Restore] No conversations found - creating new one");
+          // Create a fresh conversation for this document
           const id = generateConvId();
           const newConv: Conversation = {
             id,
@@ -218,6 +228,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             slides: [],
             selectedValues: {},
             createdAt: Date.now(),
+            documentId: docId,
           };
           await createConversation(user.id, newConv);
           setConversations([newConv]);
@@ -276,23 +287,30 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       } catch (err) {
         console.error("Failed to load conversations:", err);
         // Fallback: create a local conversation
-        const id = generateConvId();
-        const newConv: Conversation = {
-          id,
-          title: "New Chat",
-          state: initialState,
-          slides: [],
-          selectedValues: {},
-          createdAt: Date.now(),
-        };
-        setConversations([newConv]);
-        setActiveConversationId(id);
-        dispatch({ type: "RESET" });
+        try {
+          const docId = await getOrCreateDocumentId();
+          setDocumentId(docId);
+          const id = generateConvId();
+          const newConv: Conversation = {
+            id,
+            title: "New Chat",
+            state: initialState,
+            slides: [],
+            selectedValues: {},
+            createdAt: Date.now(),
+            documentId: docId,
+          };
+          setConversations([newConv]);
+          setActiveConversationId(id);
+          dispatch({ type: "RESET" });
 
-        const greeting = makeAssistantMessage(
-          "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
-        );
-        dispatch({ type: "ADD_MESSAGE", message: greeting });
+          const greeting = makeAssistantMessage(
+            "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+          );
+          dispatch({ type: "ADD_MESSAGE", message: greeting });
+        } catch {
+          console.error("Failed to get document ID");
+        }
       } finally {
         if (!cancelled) setLoadingConversations(false);
       }
@@ -373,6 +391,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       slides: [],
       selectedValues: {},
       createdAt: Date.now(),
+      documentId, // Link to current PowerPoint document
     };
 
     // Save to Supabase
@@ -396,7 +415,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       dispatch({ type: "ADD_MESSAGE", message: greeting });
       saveMessage(id, greeting).catch(() => {});
     }, 100);
-  }, [user]);
+  }, [user, documentId]);
 
   // Always-on slide detection
   const { currentSlide, totalSlides } = useSlideDetection({

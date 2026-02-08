@@ -61,4 +61,5 @@ export interface Conversation {
   slides: GeneratedSlide[];
   selectedValues: Record<string, string>;
   createdAt: number;
+  documentId?: string; // Links conversation to specific PowerPoint file
 }

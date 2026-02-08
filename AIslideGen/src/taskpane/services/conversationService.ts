@@ -6,6 +6,7 @@ import type { Conversation, ConversationState, ChatMessage, GeneratedSlide } fro
 interface ConversationRow {
   id: string;
   user_id: string;
+  document_id: string | null;
   title: string;
   state: ConversationState;
   slides: GeneratedSlide[];
@@ -24,14 +25,20 @@ interface MessageRow {
   timestamp: number;
 }
 
-// ── Fetch all conversations for a user ──
+// ── Fetch all conversations for a user and specific document ──
 
-export async function fetchConversations(userId: string): Promise<Conversation[]> {
-  const { data, error } = await supabase
+export async function fetchConversations(userId: string, documentId?: string): Promise<Conversation[]> {
+  let query = supabase
     .from("conversations")
     .select("*")
-    .eq("user_id", userId)
-    .order("updated_at", { ascending: false });
+    .eq("user_id", userId);
+
+  // Filter by document ID if provided
+  if (documentId) {
+    query = query.eq("document_id", documentId);
+  }
+
+  const { data, error } = await query.order("updated_at", { ascending: false });
 
   if (error) throw error;
 
@@ -42,6 +49,7 @@ export async function fetchConversations(userId: string): Promise<Conversation[]
     slides: row.slides,
     selectedValues: row.selected_values,
     createdAt: new Date(row.created_at).getTime(),
+    documentId: row.document_id ?? undefined,
   }));
 }
 
@@ -77,6 +85,7 @@ export async function createConversation(
     .insert({
       id: conversation.id,
       user_id: userId,
+      document_id: conversation.documentId ?? null,
       title: conversation.title,
       state: conversation.state,
       slides: conversation.slides,
