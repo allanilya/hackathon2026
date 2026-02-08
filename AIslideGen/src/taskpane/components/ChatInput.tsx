@@ -1,5 +1,5 @@
 import * as React from "react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Textarea,
   Button,
@@ -144,6 +144,8 @@ const useStyles = makeStyles({
   },
 });
 
+const DRAFT_TEXT_KEY = "chatInputDraft";
+
 const ChatInput: React.FC<ChatInputProps> = ({
   onSend,
   onFileUpload,
@@ -164,11 +166,31 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onDataUpload,
 }) => {
   const styles = useStyles();
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => {
+    // Load saved draft on initial mount
+    try {
+      return localStorage.getItem(DRAFT_TEXT_KEY) || "";
+    } catch {
+      return "";
+    }
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const dataInputRef = useRef<HTMLInputElement>(null);
   const [isParsingFile, setIsParsingFile] = useState(false);
+
+  // Save draft to localStorage whenever text changes
+  useEffect(() => {
+    try {
+      if (text) {
+        localStorage.setItem(DRAFT_TEXT_KEY, text);
+      } else {
+        localStorage.removeItem(DRAFT_TEXT_KEY);
+      }
+    } catch (error) {
+      console.warn("Failed to save draft:", error);
+    }
+  }, [text]);
 
   const handleUploadClick = () => {
     fileInputRef.current?.click();
@@ -238,6 +260,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     if (!trimmed) return;
     onSend(trimmed);
     setText("");
+    // Clear draft from localStorage when sent
+    try {
+      localStorage.removeItem(DRAFT_TEXT_KEY);
+    } catch (error) {
+      console.warn("Failed to clear draft:", error);
+    }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
