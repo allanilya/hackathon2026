@@ -74,17 +74,28 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   return (
     <div className={styles.container} ref={containerRef}>
       {messages.map((msg, idx) => (
-        <ChatMessageComponent
-          key={msg.id}
-          message={msg}
-          isLatestAssistant={idx === lastAssistantIdx}
-          onOptionSelect={(option) => onOptionSelect(msg.id, option)}
-          onOtherSubmit={(text) => onOtherSubmit(msg.id, text)}
-          selectedValue={selectedValues[msg.id]}
-        />
+        <React.Fragment key={msg.id}>
+          <ChatMessageComponent
+            message={msg}
+            isLatestAssistant={idx === lastAssistantIdx}
+            onOptionSelect={(option) => onOptionSelect(msg.id, option)}
+            onOtherSubmit={(text) => onOtherSubmit(msg.id, text)}
+            selectedValue={selectedValues[msg.id]}
+          />
+          {/* Render slides inline with the message that generated them */}
+          {msg.slides && msg.slides.length > 0 && (
+            <OutputPreview
+              slides={msg.slides}
+              onInsertSlide={onInsertSlide}
+              onInsertAll={onInsertAll}
+              insertedSlideIndexes={insertedSlideIndexes}
+            />
+          )}
+        </React.Fragment>
       ))}
       {isTyping && <TypingIndicator />}
-      {slides.length > 0 && (
+      {/* Only show slides at bottom if no message has claimed them (backwards compatibility) */}
+      {slides.length > 0 && !messages.some((m) => m.slides && m.slides.length > 0) && (
         <OutputPreview
           slides={slides}
           onInsertSlide={onInsertSlide}

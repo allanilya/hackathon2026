@@ -142,7 +142,11 @@ app.post("/api/summarize", async (req, res) => {
 });
 
 app.post("/api/search", async (req, res) => {
-  const { query, maxResults = 5 } = req.body as { query: string; maxResults?: number };
+  const { query, maxResults = 8, slideCount = 3 } = req.body as {
+    query: string;
+    maxResults?: number;
+    slideCount?: number;
+  };
 
   if (!query) {
     res.status(400).json({ error: "query is required" });
@@ -154,24 +158,40 @@ app.post("/api/search", async (req, res) => {
     return;
   }
 
-  console.log(`[Tavily] Searching for: "${query}" (max ${maxResults} results)`);
+  // Detect if this is a current events/news query
+  const lowerQuery = query.toLowerCase();
+  const isCurrentEvents = /\b(latest|recent|current|today|news|2024|2025|2026|breaking|developments)\b/i.test(lowerQuery);
+
+  // For current events, enhance query to get specific news articles (not category pages)
+  // Add specific terms that encourage article-level results
+  const searchQuery = isCurrentEvents
+    ? `${query} latest news articles analysis 2025 2026`
+    : query;
+
+  console.log(`[Tavily] Searching for: "${searchQuery}" (max ${maxResults} results, slides: ${slideCount}, current events: ${isCurrentEvents})`);
 
   try {
     const response = await tavilyClient.search({
-      query,
+      query: searchQuery,
       max_results: maxResults,
       include_answer: false,
-      search_depth: "basic",
+      search_depth: "advanced", // Use advanced for better source diversity
+      include_raw_content: false, // Don't need full content, just snippets
     });
 
     console.log(`[Tavily] Found ${response.results.length} results`);
 
-    const results = response.results.map((r) => ({
-      title: r.title,
-      url: r.url,
-      snippet: r.content,
-      source: r.url, // Full URL for citations
-    }));
+    const results = response.results.map((r) => {
+      // Log the URL to debug category page issue
+      console.log(`[Tavily] Result URL: ${r.url}`);
+
+      return {
+        title: r.title,
+        url: r.url,
+        snippet: r.content,
+        source: r.url, // Full URL for citations
+      };
+    });
 
     res.json({ results });
   } catch (error: unknown) {
@@ -185,6 +205,57 @@ app.post("/api/search", async (req, res) => {
 
     const message = error instanceof Error ? error.message : "Search failed";
     res.status(500).json({ error: `Tavily search failed: ${message}` });
+  }
+});
+
+app.post("/api/fetch-article", async (req, res) => {
+  const { url } = req.body as { url: string };
+
+  if (!url) {
+    res.status(400).json({ error: "url is required" });
+    return;
+  }
+
+  console.log(`[Article Fetch] Fetching from: ${url}`);
+
+  try {
+    // Fetch the URL content
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; SliderBot/1.0)",
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const html = await response.text();
+
+    // Basic HTML to text conversion (remove tags, get text content)
+    const textContent = html
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "") // Remove scripts
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "") // Remove styles
+      .replace(/<[^>]+>/g, " ") // Remove HTML tags
+      .replace(/\s+/g, " ") // Normalize whitespace
+      .trim();
+
+    console.log(`[Article Fetch] Successfully fetched ${textContent.length} characters`);
+
+    res.json({
+      url: url,
+      content: textContent,
+      length: textContent.length,
+    });
+  } catch (error: unknown) {
+    console.error("[Article Fetch] Error:", error);
+
+    if (error instanceof Error) {
+      console.error("[Article Fetch] Error message:", error.message);
+    }
+
+    const message = error instanceof Error ? error.message : "Article fetch failed";
+    res.status(500).json({ error: `Failed to fetch article: ${message}` });
   }
 });
 

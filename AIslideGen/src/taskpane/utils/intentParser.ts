@@ -148,3 +148,53 @@ export function detectsCurrentEvents(text: string): boolean {
   const data = /\b(current statistics|latest data|recent trends|breaking news)\b/i;
   return temporal.test(lowerText) || questions.test(lowerText) || data.test(lowerText);
 }
+
+/**
+ * Extracts URLs from user query
+ */
+export function extractUrl(text: string): string | null {
+  // Match http(s) URLs
+  const urlMatch = text.match(/https?:\/\/[^\s]+/);
+  return urlMatch ? urlMatch[0] : null;
+}
+
+/**
+ * Detects if user provided a specific URL to fetch/summarize
+ */
+export function hasProvidedUrl(text: string): boolean {
+  return extractUrl(text) !== null;
+}
+
+/**
+ * Detects if the message is a greeting
+ */
+export function isGreeting(text: string): boolean {
+  const lowerText = text.toLowerCase().trim();
+  const greetings = /^(hi|hey|hello|sup|yo|greetings|good morning|good afternoon|good evening|howdy)[\s!?.]*$/i;
+  return greetings.test(lowerText);
+}
+
+/**
+ * Detects if the message is a question (not a request to create slides)
+ */
+export function isQuestion(text: string): boolean {
+  const lowerText = text.toLowerCase().trim();
+  // Questions that are NOT slide generation requests
+  const questionWords = /^(what|who|where|when|why|how|can|could|would|should|is|are|do|does|did)/i;
+  const hasQuestionMark = text.includes("?");
+
+  // But exclude slide generation questions like "can you create slides about..."
+  const isSlideRequest = /\b(create|generate|make|build|give me|show me)\b.*\b(slide|presentation|deck)\b/i.test(lowerText);
+
+  return (questionWords.test(lowerText) || hasQuestionMark) && !isSlideRequest;
+}
+
+/**
+ * Detects if the message is clearly a slide generation request
+ */
+export function isSlideRequest(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const requestPatterns = /\b(create|generate|make|build|give me|show me|i want|i need)\b.*\b(slide|presentation|deck)\b/i;
+  const hasSlideCount = /\b(\d+|a|one|two|three|four|five|six|seven|eight|nine|ten)\s+slide/i.test(lowerText);
+  return requestPatterns.test(lowerText) || hasSlideCount;
+}

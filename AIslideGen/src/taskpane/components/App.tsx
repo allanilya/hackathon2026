@@ -11,7 +11,7 @@ import { createSlide, SlideTheme } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
-import { parseUserIntent, detectsCurrentEvents } from "../utils/intentParser";
+import { parseUserIntent, detectsCurrentEvents, hasProvidedUrl, extractUrl, isGreeting, isQuestion, isSlideRequest } from "../utils/intentParser";
 import { getOrCreateDocumentId } from "../utils/documentId";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -67,8 +67,14 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function makeAssistantMessage(text: string, options?: ChatOption[], allowOther?: boolean, searchResults?: SearchResult[]): ChatMessage {
-  return { id: generateId(), role: "assistant", text, options, allowOther, searchResults, timestamp: Date.now() };
+function makeAssistantMessage(
+  text: string,
+  options?: ChatOption[],
+  allowOther?: boolean,
+  searchResults?: SearchResult[],
+  slides?: GeneratedSlide[]
+): ChatMessage {
+  return { id: generateId(), role: "assistant", text, options, allowOther, searchResults, slides, timestamp: Date.now() };
 }
 
 function makeUserMessage(text: string): ChatMessage {
@@ -162,6 +168,8 @@ function getPlaceholder(step: ConversationStep): string {
       return "What would you like to search for?";
     case "web_search_results":
       return "Searching...";
+    case "web_search_permission":
+      return "Pick an option above or type your response...";
     case "image_analysis":
       return "Analyzing image...";
     case "image_followup":
@@ -197,6 +205,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   const [slides, setSlides] = useState<GeneratedSlide[]>([]);
   const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
   const [isWebSearchMode, setIsWebSearchMode] = useState(false);
+  const [allowAllSearches, setAllowAllSearches] = useState(false);
+  const [pendingSearchQuery, setPendingSearchQuery] = useState<string>("");
   const [loadingConversations, setLoadingConversations] = useState(true);
 
   // Multi-conversation state
@@ -528,11 +538,20 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       }
     }
 
+    // Create contextual message that references what we're generating
+    const topic = state.userPrompt.length > 50
+      ? state.userPrompt.substring(0, 50) + "..."
+      : state.userPrompt;
+
     const genMsg = makeAssistantMessage(
-      state.mode === "research" ? "Creating slides from research..." : "Perfect! Generating your slides now..."
+      state.mode === "research"
+        ? `Creating slides from research about ${topic}...`
+        : searchContext
+        ? `Creating slides from research...`
+        : `Perfect! Generating ${state.slideCount} slides about ${topic}...`
     );
     dispatch({ type: "ADD_MESSAGE", message: genMsg });
-    await await persistMessage(genMsg);
+    await persistMessage(genMsg);
 
     // Get recent conversation history with proper roles
     const conversationHistory = buildConversationHistory(state.messages);
@@ -560,11 +579,16 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       }
 
       const data = await response.json();
-      setSlides(data.slides || []);
+      const generatedSlides = data.slides || [];
+      setSlides(generatedSlides);
       dispatch({ type: "SET_STEP", step: "complete" });
 
       const doneMsg = makeAssistantMessage(
-        `Here are your ${data.slides?.length || 0} slides! You can insert them individually or all at once into your presentation.`
+        `Here are your ${generatedSlides.length} slides! You can insert them individually or all at once into your presentation.`,
+        undefined,
+        undefined,
+        undefined,
+        generatedSlides // Attach slides to this message
       );
       dispatch({ type: "ADD_MESSAGE", message: doneMsg });
       await persistMessage(doneMsg);
@@ -678,16 +702,120 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     }
   }, [persistMessage]);
 
+  const runArticleFetch = useCallback(async (query: string, url: string) => {
+    dispatch({ type: "SET_STEP", step: "generating" });
+    setIsTyping(true);
+
+    try {
+      // Parse user intent to extract preferences
+      const intent = parseUserIntent(query);
+      const slideCount = intent.slideCount !== undefined ? intent.slideCount : (state.slideCount || 3);
+      const tone = intent.tone || state.tone || "professional";
+      const mode = intent.mode || "summarize"; // Default to summarize for article URLs
+      const topic = intent.topic || `Article from ${url}`;
+
+      const fetchMsg = makeAssistantMessage(`Fetching article from ${url}...`);
+      dispatch({ type: "ADD_MESSAGE", message: fetchMsg });
+      await persistMessage(fetchMsg);
+
+      // Fetch article content
+      const response = await fetch("/api/fetch-article", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+      const articleContent = data.content || "";
+
+      if (!articleContent) {
+        throw new Error("No content found in article");
+      }
+
+      const contentMsg = makeAssistantMessage(
+        `Got it! Creating ${slideCount} slides summarizing this article...`
+      );
+      dispatch({ type: "ADD_MESSAGE", message: contentMsg });
+      await persistMessage(contentMsg);
+
+      // Set up state for slide generation
+      dispatch({ type: "SET_USER_PROMPT", prompt: topic });
+      dispatch({ type: "SET_MODE", mode });
+      dispatch({ type: "SET_SLIDE_COUNT", count: slideCount });
+      dispatch({ type: "SET_TONE", tone });
+      dispatch({
+        type: "SET_ADDITIONAL_CONTEXT",
+        text: `ARTICLE CONTENT:\n${articleContent.substring(0, 10000)}`, // Limit to 10k chars
+      });
+
+      await delay(300);
+
+      // Generate slides
+      const conversationHistory = buildConversationHistory(state.messages);
+
+      const genResponse = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: `Summarize this article about ${topic}`,
+          mode,
+          slideCount,
+          tone,
+          additionalContext: `ARTICLE FROM ${url}:\n${articleContent.substring(0, 10000)}`,
+          conversationHistory,
+        }),
+      });
+
+      if (!genResponse.ok) {
+        const errBody = await genResponse.json().catch(() => ({}));
+        throw new Error(errBody.error || `Generation failed (${genResponse.status})`);
+      }
+
+      const genData = await genResponse.json();
+      const generatedSlides = genData.slides || [];
+      setSlides(generatedSlides);
+      dispatch({ type: "SET_STEP", step: "complete" });
+
+      const doneMsg = makeAssistantMessage(
+        `Here are your ${generatedSlides.length} slides summarizing the article! You can insert them individually or all at once into your presentation.`,
+        undefined,
+        undefined,
+        undefined,
+        generatedSlides // Attach slides to this message
+      );
+      dispatch({ type: "ADD_MESSAGE", message: doneMsg });
+      await persistMessage(doneMsg);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to fetch article";
+      const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+      dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+      await persistMessage(errorMsg);
+      dispatch({ type: "SET_STEP", step: "initial" });
+    } finally {
+      setIsTyping(false);
+    }
+  }, [state.slideCount, state.tone, state.messages, buildConversationHistory, persistMessage]);
+
   const runWebSearch = useCallback(async (query: string) => {
     dispatch({ type: "SET_STEP", step: "web_search_results" });
     setIsTyping(true);
 
     // Parse user intent to extract preferences from the query
     const intent = parseUserIntent(query);
-    const slideCount = intent.slideCount !== undefined ? intent.slideCount : 3;
-    const tone = intent.tone || "professional";
+    // Use current state slideCount if available (for follow-ups), otherwise from intent or default to 3
+    const slideCount = intent.slideCount !== undefined ? intent.slideCount : (state.slideCount || 3);
+    const tone = intent.tone || state.tone || "professional";
     const mode = intent.mode || "research";
     const topic = intent.topic || query;
+
+    // Scale search results based on slide count: more slides = more sources needed
+    // Formula: slideCount + 3, minimum 5, maximum 12
+    const maxResults = Math.min(Math.max(slideCount + 3, 5), 12);
 
     // Determine if web search is actually needed based on query context
     const needsWebSearch =
@@ -708,7 +836,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             query: topic,
-            maxResults: 5,
+            maxResults,
+            slideCount, // Pass slide count to backend for query optimization
           }),
         });
 
@@ -784,11 +913,16 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       }
 
       const genData = await genResponse.json();
-      setSlides(genData.slides || []);
+      const generatedSlides = genData.slides || [];
+      setSlides(generatedSlides);
       dispatch({ type: "SET_STEP", step: "complete" });
 
       const doneMsg = makeAssistantMessage(
-        `Here are your ${genData.slides?.length || 0} slides! You can insert them individually or all at once into your presentation.`
+        `Here are your ${generatedSlides.length} slides! You can insert them individually or all at once into your presentation.`,
+        undefined,
+        undefined,
+        undefined,
+        generatedSlides // Attach slides to this message
       );
       dispatch({ type: "ADD_MESSAGE", message: doneMsg });
       setIsWebSearchMode(false);
@@ -801,7 +935,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     } finally {
       setIsTyping(false);
     }
-  }, [state.messages, buildConversationHistory]);
+  }, [state.messages, state.slideCount, state.tone, buildConversationHistory]);
 
   const handleSend = useCallback(
     async (text: string, option?: ChatOption) => {
@@ -814,18 +948,66 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
       switch (currentStep) {
         case "initial": {
-          // Parse user intent from the message
+          // CONTEXT MATTERS: Detect user intent carefully before assuming they want slides
+
+          // 1. Check if it's a greeting
+          if (isGreeting(text)) {
+            const greetingMsg = makeAssistantMessage(
+              "Hi there! 👋 I'm Slider, your AI presentation assistant. I can help you create slides about any topic. Just tell me what you'd like to make a presentation about!"
+            );
+            dispatch({ type: "ADD_MESSAGE", message: greetingMsg });
+            await persistMessage(greetingMsg);
+            return;
+          }
+
+          // 2. Check if it's a question (not a slide request)
+          if (isQuestion(text) && !isSlideRequest(text)) {
+            const questionMsg = makeAssistantMessage(
+              "I'm here to help create presentation slides! You can:\n• Ask me to create slides about a topic\n• Provide a URL to summarize into slides\n• Upload files or images to turn into presentations\n\nWhat would you like to create slides about?"
+            );
+            dispatch({ type: "ADD_MESSAGE", message: questionMsg });
+            await persistMessage(questionMsg);
+            return;
+          }
+
+          // 3. Parse user intent from the message
           const intent = parseUserIntent(text);
 
-          // Check if web search is needed (toggle ON or current events detected)
-          const needsWebSearch = detectsCurrentEvents(text);
-          if (!isWebSearchMode && needsWebSearch) {
-            // Auto-trigger web search for current events without toggle
-            const msg = makeAssistantMessage("Searching the web for latest information...");
-            dispatch({ type: "ADD_MESSAGE", message: msg });
-            await await persistMessage(msg);
-            await runWebSearch(text);
+          // 4. Check if user provided a specific URL - if so, fetch that article directly
+          const providedUrl = extractUrl(text);
+          if (providedUrl) {
+            // User provided a URL - fetch it directly without asking permission
+            await runArticleFetch(text, providedUrl);
             return;
+          }
+
+          // Check if web search is needed (toggle ON or current events detected)
+          const needsWebSearch = isWebSearchMode || detectsCurrentEvents(text);
+          if (needsWebSearch) {
+            // Check if user has allowed all searches this session
+            if (allowAllSearches) {
+              // Auto-trigger web search with permission
+              const msg = makeAssistantMessage("Searching the web for latest information...");
+              dispatch({ type: "ADD_MESSAGE", message: msg });
+              await persistMessage(msg);
+              await runWebSearch(text);
+              return;
+            } else {
+              // Ask for permission first, even if toggle is ON
+              setPendingSearchQuery(text);
+              dispatch({ type: "SET_STEP", step: "web_search_permission" });
+              const permissionMsg = makeAssistantMessage(
+                "This query would benefit from web search to get the latest information. Would you like me to search online?",
+                [
+                  { label: "Yes, search now", value: "yes" },
+                  { label: "Yes, and allow all searches this session", value: "allow_all" },
+                  { label: "No, continue without search", value: "no" },
+                ]
+              );
+              dispatch({ type: "ADD_MESSAGE", message: permissionMsg });
+              await persistMessage(permissionMsg);
+              return;
+            }
           }
 
           // Set the topic/prompt
@@ -1017,22 +1199,78 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         }
 
         case "complete": {
-          // User wants to create new slides after previous ones were generated
-          // Parse intent and check if web search is needed
+          // CONTEXT MATTERS: Detect user intent carefully before assuming they want slides
+
+          // 1. Check if it's a greeting
+          if (isGreeting(text)) {
+            const greetingMsg = makeAssistantMessage(
+              "Hey! 👋 How can I help you with your presentation? You can ask me to create slides, or just let me know what you'd like to work on."
+            );
+            dispatch({ type: "ADD_MESSAGE", message: greetingMsg });
+            await persistMessage(greetingMsg);
+            return;
+          }
+
+          // 2. Check if it's a question (not a slide request)
+          if (isQuestion(text) && !isSlideRequest(text)) {
+            const questionMsg = makeAssistantMessage(
+              "I'm here to help create presentation slides! If you'd like me to make slides about something, just let me know the topic. For example: 'Create 3 slides about AI developments' or 'Summarize this article: [URL]'."
+            );
+            dispatch({ type: "ADD_MESSAGE", message: questionMsg });
+            await persistMessage(questionMsg);
+            return;
+          }
+
+          // 3. Parse intent for slide generation
           const intent = parseUserIntent(text);
           const needsWebSearch = detectsCurrentEvents(text);
+
+          // 4. Validate input - must have meaningful content for slide generation
+          if (!intent.hasAllInfo && text.trim().length < 5) {
+            const clarifyMsg = makeAssistantMessage(
+              "I'd love to help! What would you like me to create slides about?"
+            );
+            dispatch({ type: "ADD_MESSAGE", message: clarifyMsg });
+            await persistMessage(clarifyMsg);
+            return;
+          }
+
+          // Check if user provided a specific URL - if so, fetch that article directly
+          const providedUrl = extractUrl(text);
+          if (providedUrl) {
+            // User provided a URL - fetch it directly without asking permission
+            setSlides([]);
+            await runArticleFetch(text, providedUrl);
+            return;
+          }
 
           // Check if web search should be used (toggle ON OR current events detected)
           if (isWebSearchMode || needsWebSearch) {
             // Clear old slides
             setSlides([]);
 
-            // Show message if auto-detected (toggle OFF + current events)
-            if (!isWebSearchMode && needsWebSearch) {
-              const msg = makeAssistantMessage("Searching the web for latest information...");
-              dispatch({ type: "ADD_MESSAGE", message: msg });
-              await await persistMessage(msg);
+            // Always ask for permission unless user allowed all
+            if (!allowAllSearches) {
+              // Ask for permission first, even if toggle is ON
+              setPendingSearchQuery(text);
+              dispatch({ type: "SET_STEP", step: "web_search_permission" });
+              const permissionMsg = makeAssistantMessage(
+                "This query would benefit from web search to get the latest information. Would you like me to search online?",
+                [
+                  { label: "Yes, search now", value: "yes" },
+                  { label: "Yes, and allow all searches this session", value: "allow_all" },
+                  { label: "No, continue without search", value: "no" },
+                ]
+              );
+              dispatch({ type: "ADD_MESSAGE", message: permissionMsg });
+              await persistMessage(permissionMsg);
+              return;
             }
+
+            // User has allowed all searches
+            const msg = makeAssistantMessage("Searching the web for latest information...");
+            dispatch({ type: "ADD_MESSAGE", message: msg });
+            await persistMessage(msg);
 
             await runWebSearch(text);
             return;
@@ -1065,11 +1303,52 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
         }
 
+        case "web_search_permission": {
+          // Handle user's response to web search permission
+          const choice = option?.value || text.toLowerCase();
+
+          if (choice === "yes" || choice === "allow_all") {
+            // Set allow all flag if requested
+            if (choice === "allow_all") {
+              setAllowAllSearches(true);
+              const confirmMsg = makeAssistantMessage(
+                "Got it! I'll automatically use web search for relevant queries for the rest of this session."
+              );
+              dispatch({ type: "ADD_MESSAGE", message: confirmMsg });
+              await persistMessage(confirmMsg);
+            }
+
+            // Proceed with web search using the pending query
+            const searchMsg = makeAssistantMessage("Searching the web for latest information...");
+            dispatch({ type: "ADD_MESSAGE", message: searchMsg });
+            await persistMessage(searchMsg);
+            await runWebSearch(pendingSearchQuery);
+            setPendingSearchQuery("");
+          } else if (choice === "no") {
+            // Continue without web search
+            const continueMsg = makeAssistantMessage(
+              "No problem! Continuing without web search. What would you like to create slides about?"
+            );
+            dispatch({ type: "ADD_MESSAGE", message: continueMsg });
+            await persistMessage(continueMsg);
+            dispatch({ type: "SET_STEP", step: "initial" });
+            setPendingSearchQuery("");
+          } else {
+            // Invalid response
+            const clarifyMsg = makeAssistantMessage(
+              "Please choose one of the options above or type 'yes', 'no', or 'allow all'."
+            );
+            dispatch({ type: "ADD_MESSAGE", message: clarifyMsg });
+            await persistMessage(clarifyMsg);
+          }
+          break;
+        }
+
         default:
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, persistMessage]
+    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery]
   );
 
   const handleOptionSelect = useCallback(

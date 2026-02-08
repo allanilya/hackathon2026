@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState, useRef } from "react";
 import {
-  Input,
+  Textarea,
   Button,
   makeStyles,
   tokens,
@@ -198,6 +198,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows) inserts a newline
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Allow default behavior (insert newline)
+      return;
+    }
+
+    // Plain Enter (without Shift, Cmd, or Ctrl) sends the message
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -299,7 +306,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             </MenuList>
           </MenuPopover>
         </Menu>
-        <Input
+        <Textarea
           className={styles.input}
           placeholder={placeholder}
           value={text}
@@ -307,6 +314,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           size="medium"
+          resize="vertical"
+          rows={1}
         />
         <Button
           appearance="primary"
