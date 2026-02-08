@@ -166,6 +166,49 @@ export function hasProvidedUrl(text: string): boolean {
 }
 
 /**
+ * Detects if a URL is likely an article (news, blog, documentation)
+ * vs other types (GitHub, YouTube, PDF, etc.)
+ */
+export function isArticleUrl(url: string): boolean {
+  const lowerUrl = url.toLowerCase();
+
+  // Exclude known non-article sites
+  if (
+    lowerUrl.includes('github.com') ||
+    lowerUrl.includes('youtube.com') ||
+    lowerUrl.includes('youtu.be') ||
+    lowerUrl.includes('twitter.com') ||
+    lowerUrl.includes('x.com') ||
+    lowerUrl.includes('instagram.com') ||
+    lowerUrl.includes('facebook.com') ||
+    lowerUrl.endsWith('.pdf') ||
+    lowerUrl.endsWith('.jpg') ||
+    lowerUrl.endsWith('.png') ||
+    lowerUrl.endsWith('.gif') ||
+    lowerUrl.includes('/api/')
+  ) {
+    return false;
+  }
+
+  // Include known article/news/blog sites
+  if (
+    lowerUrl.includes('medium.com') ||
+    lowerUrl.includes('substack.com') ||
+    lowerUrl.includes('news') ||
+    lowerUrl.includes('blog') ||
+    lowerUrl.includes('article') ||
+    lowerUrl.includes('post') ||
+    lowerUrl.includes('docs') ||
+    lowerUrl.includes('/wiki/')
+  ) {
+    return true;
+  }
+
+  // Default: assume it's an article if it's a regular webpage
+  return true;
+}
+
+/**
  * Detects if the message is a greeting
  */
 export function isGreeting(text: string): boolean {
