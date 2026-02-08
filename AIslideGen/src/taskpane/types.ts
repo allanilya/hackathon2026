@@ -21,6 +21,12 @@ export interface SearchResult {
   source?: string;
 }
 
+export interface ImageData {
+  fileName: string;
+  base64: string;
+  mimeType: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: ChatMessageRole;
@@ -29,6 +35,7 @@ export interface ChatMessage {
   allowOther?: boolean;
   timestamp: number;
   searchResults?: SearchResult[];
+  image?: ImageData;
 }
 
 export type ConversationStep =
@@ -42,7 +49,9 @@ export type ConversationStep =
   | "summarize_ask"
   | "summarize_generating"
   | "web_search_query"
-  | "web_search_results";
+  | "web_search_results"
+  | "image_analysis"
+  | "image_followup";
 
 export interface ConversationState {
   step: ConversationStep;
@@ -52,6 +61,7 @@ export interface ConversationState {
   tone: Tone;
   additionalContext: string;
   messages: ChatMessage[];
+  image?: ImageData;
 }
 
 export interface Conversation {

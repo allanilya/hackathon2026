@@ -73,6 +73,18 @@ const useStyles = makeStyles({
     fontSize: tokens.fontSizeBase100,
     color: tokens.colorNeutralForeground3,
   },
+  imageContainer: {
+    marginTop: "8px",
+    marginBottom: "4px",
+    borderRadius: "8px",
+    overflow: "hidden",
+    maxWidth: "100%",
+  },
+  image: {
+    maxWidth: "100%",
+    height: "auto",
+    display: "block",
+  },
 });
 
 const ChatMessageComponent: React.FC<ChatMessageProps> = ({
@@ -87,7 +99,18 @@ const ChatMessageComponent: React.FC<ChatMessageProps> = ({
 
   return (
     <div className={`${styles.row} ${isAssistant ? styles.assistantRow : styles.userRow}`}>
-      <div className={isAssistant ? styles.assistantBubble : styles.userBubble}>{message.text}</div>
+      <div className={isAssistant ? styles.assistantBubble : styles.userBubble}>
+        {message.image && (
+          <div className={styles.imageContainer}>
+            <img
+              src={`data:${message.image.mimeType};base64,${message.image.base64}`}
+              alt={message.image.fileName}
+              className={styles.image}
+            />
+          </div>
+        )}
+        {message.text}
+      </div>
       {isAssistant && message.options && message.options.length > 0 && (
         <ChatOptionChips
           options={message.options}

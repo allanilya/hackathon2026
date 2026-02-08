@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slider — Design System</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* === SLIDER DESIGN TOKENS === */
+
+    /* Primary */
+    --primary: #C4501E;
+    --primary-hover: #A8431A;
+    --primary-subtle: rgba(196,80,30,0.08);
+    --primary-border: rgba(196,80,30,0.2);
+
+    /* Neutrals */
+    --gray-950: #0C0A09;
+    --gray-900: #1C1917;
+    --gray-800: #292524;
+    --gray-700: #44403C;
+    --gray-600: #57534E;
+    --gray-500: #78716C;
+    --gray-400: #A8A29E;
+    --gray-300: #D6D3D1;
+    --gray-200: #E7E5E4;
+    --gray-100: #F5F5F4;
+    --gray-50: #FAFAF9;
+    --white: #FFFFFF;
+
+    /* Accent */
+    --amber: #D97706;
+    --amber-subtle: rgba(217,119,6,0.08);
+    --teal: #0F766E;
+    --teal-subtle: rgba(15,118,110,0.08);
+
+    /* Semantic */
+    --success: #16A34A;
+    --error: #DC2626;
+
+    /* Surfaces */
+    --bg: var(--white);
+    --bg-secondary: var(--gray-50);
+    --bg-code: var(--gray-900);
+    --border: var(--gray-200);
+    --border-strong: var(--gray-300);
+
+    /* Typography */
+    --font-sans: 'Inter', -apple-system, system-ui, sans-serif;
+    --font-serif: 'Instrument Serif', Georgia, serif;
+    --font-mono: 'JetBrains Mono', 'SF Mono', monospace;
+
+    /* Radius */
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-pill: 999px;
+
+    /* Shadows */
+    --shadow-xs: 0 1px 2px rgba(0,0,0,0.05);
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+    --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg);
+    color: var(--gray-900);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ========== DOC LAYOUT ========== */
+  .doc {
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 80px 32px;
+  }
+
+  .doc-header {
+    margin-bottom: 64px;
+    padding-bottom: 40px;
+    border-bottom: 1px solid var(--border);
+  }
+  .doc-header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 32px;
+  }
+  .doc-version {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--gray-500);
+    padding: 4px 10px;
+    background: var(--gray-100);
+    border-radius: var(--radius-sm);
+  }
+  .doc-title {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+  .doc-subtitle {
+    font-size: 15px;
+    color: var(--gray-500);
+    line-height: 1.6;
+    max-width: 560px;
+  }
+
+  /* Sections */
+  .section {
+    margin-bottom: 64px;
+  }
+  .section-heading {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gray-400);
+    margin-bottom: 20px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-title {
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+  }
+  .section-desc {
+    font-size: 14px;
+    color: var(--gray-500);
+    margin-bottom: 24px;
+    max-width: 560px;
+    line-height: 1.65;
+  }
+
+  /* ========== LOGO ========== */
+  .logo-section {
+    display: flex;
+    gap: 64px;
+    align-items: flex-start;
+  }
+  .logo-display {
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+  .logo-container {
+    padding: 40px 48px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    background: var(--bg);
+  }
+  .logo-container-dark {
+    background: var(--gray-900);
+    border-color: var(--gray-800);
+  }
+
+  /* SVG Logo Mark */
+  .logo-mark {
+    flex-shrink: 0;
+    display: inline-block;
+    line-height: 0;
+  }
+  .logo-mark svg {
+    display: block;
+  }
+  /* Fill color tokens for SVG layers */
+  .mark-title { fill: var(--primary); }
+  .mark-cols { fill: var(--teal); }
+  .mark-chart { fill: var(--gray-800); }
+  .mark-accent { fill: var(--amber); }
+  .mark-footer { fill: var(--primary); opacity: 0.6; }
+
+  /* Dark variant — chart bars swap to light */
+  .logo-container-dark .mark-chart { fill: var(--gray-200); }
+
+  .logo-wordmark {
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: -0.03em;
+    color: var(--gray-900);
+  }
+  .logo-container-dark .logo-wordmark {
+    color: var(--gray-100);
+  }
+
+  .logo-notes {
+    flex: 1;
+    min-width: 240px;
+  }
+  .logo-note {
+    margin-bottom: 16px;
+    padding-left: 12px;
+    border-left: 2px solid var(--border);
+  }
+  .logo-note-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--gray-900);
+    margin-bottom: 2px;
+  }
+  .logo-note-text {
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.55;
+  }
+
+  /* ========== COLORS ========== */
+  .color-group {
+    margin-bottom: 32px;
+  }
+  .color-group-label {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: var(--gray-700);
+  }
+  .color-row {
+    display: flex;
+    gap: 2px;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .color-cell {
+    flex: 1;
+    height: 64px;
+    position: relative;
+    display: flex;
+    align-items: flex-end;
+    padding: 6px 8px;
+    cursor: default;
+    transition: flex 0.2s ease;
+  }
+  .color-cell:hover {
+    flex: 1.8;
+  }
+  .color-meta {
+    opacity: 0;
+    transition: opacity 0.2s;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+  .color-cell:hover .color-meta {
+    opacity: 1;
+  }
+  .color-meta-light { color: rgba(255,255,255,0.8); }
+  .color-meta-dark { color: rgba(0,0,0,0.45); }
+
+  /* Standalone color tokens */
+  .token-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .token {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .token-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    flex-shrink: 0;
+    border: 1px solid rgba(0,0,0,0.06);
+  }
+  .token-info {}
+  .token-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-800);
+  }
+  .token-value {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--gray-400);
+  }
+
+  /* ========== TYPOGRAPHY ========== */
+  .type-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .type-table td {
+    padding: 20px 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: baseline;
+  }
+  .type-table tr:last-child td { border-bottom: none; }
+  .type-spec {
+    width: 180px;
+    padding-right: 24px;
+  }
+  .type-spec-name {
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--gray-800);
+    margin-bottom: 2px;
+  }
+  .type-spec-detail {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--gray-400);
+    line-height: 1.5;
+  }
+  .type-display-h1 {
+    font-size: 48px;
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+  }
+  .type-display-h2 {
+    font-size: 32px;
+    font-weight: 700;
+    letter-spacing: -0.025em;
+    line-height: 1.15;
+  }
+  .type-display-h3 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+  }
+  .type-display-body {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--gray-600);
+    max-width: 480px;
+  }
+  .type-display-mono {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--gray-600);
+  }
+  .type-display-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--gray-400);
+  }
+  .type-accent-serif {
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--primary);
+  }
+
+  /* ========== COMPONENTS ========== */
+  .comp-group {
+    margin-bottom: 40px;
+  }
+  .comp-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-700);
+    margin-bottom: 16px;
+  }
+  .comp-row {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    text-decoration: none;
+    padding: 9px 16px;
+    border-radius: var(--radius-sm);
+  }
+  .btn-primary {
+    background: var(--primary);
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: var(--primary-hover);
+  }
+  .btn-secondary {
+    background: var(--gray-900);
+    color: var(--gray-100);
+  }
+  .btn-secondary:hover {
+    background: var(--gray-800);
+  }
+  .btn-outline {
+    background: var(--bg);
+    color: var(--gray-700);
+    box-shadow: inset 0 0 0 1px var(--gray-300);
+  }
+  .btn-outline:hover {
+    background: var(--gray-50);
+    box-shadow: inset 0 0 0 1px var(--gray-400);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--gray-600);
+    padding: 9px 10px;
+  }
+  .btn-ghost:hover {
+    color: var(--gray-900);
+    background: var(--gray-100);
+  }
+  .btn-lg {
+    padding: 12px 24px;
+    font-size: 14px;
+    border-radius: var(--radius-md);
+  }
+  .btn-pill {
+    border-radius: var(--radius-pill);
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: var(--radius-pill);
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-default {
+    background: var(--gray-100);
+    color: var(--gray-600);
+  }
+  .badge-primary {
+    background: var(--primary-subtle);
+    color: var(--primary);
+  }
+  .badge-amber {
+    background: var(--amber-subtle);
+    color: var(--amber);
+  }
+  .badge-teal {
+    background: var(--teal-subtle);
+    color: var(--teal);
+  }
+
+  /* Cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .card {
+    padding: 24px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    transition: all 0.2s ease;
+  }
+  .card:hover {
+    border-color: var(--gray-300);
+    box-shadow: var(--shadow-sm);
+  }
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    margin-bottom: 16px;
+    background: var(--gray-100);
+  }
+  .card-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--gray-900);
+  }
+  .card-text {
+    font-size: 13px;
+    color: var(--gray-500);
+    line-height: 1.55;
+  }
+
+  /* ========== HERO PREVIEW — LIGHT ========== */
+  .hero-block {
+    background: var(--gray-50);
+    border-radius: var(--radius-xl);
+    padding: 48px;
+    margin-top: 24px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  .hero-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 48px;
+  }
+  .hero-nav-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 16px;
+    color: var(--gray-900);
+    letter-spacing: -0.02em;
+  }
+  .hero-nav-links {
+    display: flex;
+    gap: 28px;
+    list-style: none;
+  }
+  .hero-nav-links a {
+    color: var(--gray-500);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 500;
+    transition: color 0.15s;
+  }
+  .hero-nav-links a:hover { color: var(--gray-900); }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 14px;
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--gray-600);
+    margin-bottom: 28px;
+  }
+  .hero-badge-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--primary);
+    animation: pulse 2s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .hero-heading {
+    font-size: 44px;
+    font-weight: 700;
+    letter-spacing: -0.035em;
+    line-height: 1.1;
+    color: var(--gray-900);
+    margin-bottom: 16px;
+    max-width: 520px;
+  }
+  .hero-heading .accent {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-weight: 400;
+    color: var(--primary);
+  }
+  .hero-sub {
+    font-size: 15px;
+    color: var(--gray-500);
+    line-height: 1.7;
+    max-width: 440px;
+    margin-bottom: 32px;
+  }
+  .hero-ctas {
+    display: flex;
+    gap: 10px;
+  }
+
+  .hero-stats {
+    display: flex;
+    gap: 48px;
+    margin-top: 48px;
+    padding-top: 28px;
+    border-top: 1px solid var(--border);
+  }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--gray-900);
+    font-variant-numeric: tabular-nums;
+  }
+  .stat-label {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  /* ========== CODE BLOCK ========== */
+  .code-block {
+    background: var(--gray-900);
+    border-radius: var(--radius-md);
+    padding: 20px 24px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.7;
+    color: var(--gray-300);
+    overflow-x: auto;
+    border: 1px solid var(--gray-800);
+    margin-top: 16px;
+  }
+  .code-comment { color: var(--gray-600); }
+  .code-key { color: #93C5FD; }
+  .code-value { color: #FCA5A5; }
+  .code-string { color: #86EFAC; }
+
+  /* ========== USAGE NOTES ========== */
+  .usage-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .usage-card {
+    padding: 16px 20px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .usage-do {
+    border-left: 3px solid var(--success);
+  }
+  .usage-dont {
+    border-left: 3px solid var(--error);
+  }
+  .usage-title {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 8px;
+  }
+  .usage-do .usage-title { color: var(--success); }
+  .usage-dont .usage-title { color: var(--error); }
+  .usage-text {
+    font-size: 13px;
+    color: var(--gray-600);
+    line-height: 1.55;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .doc { padding: 48px 20px; }
+    .logo-section { flex-direction: column; gap: 32px; }
+    .type-spec { width: 120px; }
+    .type-display-h1 { font-size: 32px; }
+    .type-display-h2 { font-size: 24px; }
+    .card-grid { grid-template-columns: 1fr; }
+    .hero-block { padding: 28px; }
+    .hero-heading { font-size: 28px; }
+    .hero-stats { flex-direction: column; gap: 20px; }
+    .usage-grid { grid-template-columns: 1fr; }
+    .color-row { flex-direction: column; }
+    .color-cell { height: 40px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="doc">
+
+  <!-- ===== HEADER ===== -->
+  <div class="doc-header">
+    <div class="doc-header-top">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <svg class="logo-mark" width="36" height="36" viewBox="0 0 36 36" fill="none">
+          <rect class="mark-title" x="3" y="1" width="30" height="5" rx="1.5"/>
+          <rect class="mark-cols" x="3" y="9" width="13" height="5" rx="1"/>
+          <rect class="mark-cols" x="18" y="9" width="15" height="5" rx="1"/>
+          <rect class="mark-chart" x="4" y="21" width="6" height="4" rx=".75"/>
+          <rect class="mark-chart" x="12" y="19" width="6" height="6" rx=".75"/>
+          <rect class="mark-chart" x="20" y="17" width="6" height="8" rx=".75"/>
+          <rect class="mark-accent" x="3" y="28" width="30" height="3" rx="1.5"/>
+          <rect class="mark-footer" x="7" y="33" width="22" height="2" rx="1"/>
+        </svg>
+        <span class="logo-wordmark">Slider</span>
+      </div>
+      <span class="doc-version">v0.1 — Brand System</span>
+    </div>
+    <div class="doc-title">Design System</div>
+    <div class="doc-subtitle">
+      Brand guidelines and component tokens for Slider — an AI-powered copilot for building presentation decks inside PowerPoint.
+    </div>
+  </div>
+
+  <!-- ===== LOGO ===== -->
+  <div class="section">
+    <div class="section-heading">01 — Logo</div>
+    <div class="logo-section">
+      <div class="logo-display">
+        <div class="logo-container">
+          <svg class="logo-mark" width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect class="mark-title" x="5" y="2" width="54" height="9" rx="2.5"/>
+            <rect class="mark-cols" x="5" y="16" width="24" height="9" rx="2"/>
+            <rect class="mark-cols" x="32" y="16" width="27" height="9" rx="2"/>
+            <rect class="mark-chart" x="7" y="37" width="11" height="7" rx="1.5"/>
+            <rect class="mark-chart" x="21" y="33" width="11" height="11" rx="1.5"/>
+            <rect class="mark-chart" x="35" y="30" width="11" height="14" rx="1.5"/>
+            <rect class="mark-accent" x="5" y="49" width="54" height="5" rx="2.5"/>
+            <rect class="mark-footer" x="12" y="59" width="40" height="3" rx="1.5"/>
+          </svg>
+          <span class="logo-wordmark" style="font-size:28px;">Slider</span>
+        </div>
+        <div class="logo-container logo-container-dark">
+          <svg class="logo-mark" width="64" height="64" viewBox="0 0 64 64" fill="none">
+            <rect class="mark-title" x="5" y="2" width="54" height="9" rx="2.5"/>
+            <rect class="mark-cols" x="5" y="16" width="24" height="9" rx="2"/>
+            <rect class="mark-cols" x="32" y="16" width="27" height="9" rx="2"/>
+            <rect class="mark-chart" x="7" y="37" width="11" height="7" rx="1.5"/>
+            <rect class="mark-chart" x="21" y="33" width="11" height="11" rx="1.5"/>
+            <rect class="mark-chart" x="35" y="30" width="11" height="14" rx="1.5"/>
+            <rect class="mark-accent" x="5" y="49" width="54" height="5" rx="2.5"/>
+            <rect class="mark-footer" x="12" y="59" width="40" height="3" rx="1.5"/>
+          </svg>
+          <span class="logo-wordmark" style="font-size:28px;">Slider</span>
+        </div>
+      </div>
+      <div class="logo-notes">
+        <div class="logo-note">
+          <div class="logo-note-label">Concept</div>
+          <div class="logo-note-text">Each layer is an abstracted slide asset — title bar, content columns, ascending chart bars, data accent line. Reads as a cohesive stack at a glance; the details reward at larger sizes.</div>
+        </div>
+        <div class="logo-note">
+          <div class="logo-note-label">Layer anatomy</div>
+          <div class="logo-note-text">Top → bottom: title bar (primary), content columns (teal), chart bars ascending (dark), accent data line (amber), footer rule (primary, 60% opacity).</div>
+        </div>
+        <div class="logo-note">
+          <div class="logo-note-label">Clear space</div>
+          <div class="logo-note-text">Maintain 1× mark width on all sides. Never place the mark inside a container smaller than 24×24px.</div>
+        </div>
+        <div class="logo-note">
+          <div class="logo-note-label">Wordmark</div>
+          <div class="logo-note-text">Inter Bold, -3% tracking. Always paired with the mark except in inline text references.</div>
+        </div>
+        <div class="logo-note">
+          <div class="logo-note-label">Monochrome</div>
+          <div class="logo-note-text">When color isn't available, all layers use the foreground color. Title and accent bars at 100%, columns at 70%, chart bars at 85%, footer at 50%.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== COLORS ===== -->
+  <div class="section">
+    <div class="section-heading">02 — Color</div>
+    <div class="section-title">Neutral scale</div>
+    <div class="section-desc">Stone-based neutrals. Warm enough to feel intentional, neutral enough to stay professional.</div>
+
+    <div class="color-group">
+      <div class="color-row">
+        <div class="color-cell" style="background:var(--gray-950);"><span class="color-meta color-meta-light">950</span></div>
+        <div class="color-cell" style="background:var(--gray-900);"><span class="color-meta color-meta-light">900</span></div>
+        <div class="color-cell" style="background:var(--gray-800);"><span class="color-meta color-meta-light">800</span></div>
+        <div class="color-cell" style="background:var(--gray-700);"><span class="color-meta color-meta-light">700</span></div>
+        <div class="color-cell" style="background:var(--gray-600);"><span class="color-meta color-meta-light">600</span></div>
+        <div class="color-cell" style="background:var(--gray-500);"><span class="color-meta color-meta-light">500</span></div>
+        <div class="color-cell" style="background:var(--gray-400);"><span class="color-meta color-meta-dark">400</span></div>
+        <div class="color-cell" style="background:var(--gray-300);"><span class="color-meta color-meta-dark">300</span></div>
+        <div class="color-cell" style="background:var(--gray-200);"><span class="color-meta color-meta-dark">200</span></div>
+        <div class="color-cell" style="background:var(--gray-100);"><span class="color-meta color-meta-dark">100</span></div>
+        <div class="color-cell" style="background:var(--gray-50);"><span class="color-meta color-meta-dark">50</span></div>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:32px;">Brand &amp; accent tokens</div>
+    <div class="token-grid">
+      <div class="token">
+        <div class="token-swatch" style="background:var(--primary);"></div>
+        <div class="token-info">
+          <div class="token-name">Primary</div>
+          <div class="token-value">#C4501E</div>
+        </div>
+      </div>
+      <div class="token">
+        <div class="token-swatch" style="background:var(--primary-hover);"></div>
+        <div class="token-info">
+          <div class="token-name">Primary Hover</div>
+          <div class="token-value">#A8431A</div>
+        </div>
+      </div>
+      <div class="token">
+        <div class="token-swatch" style="background:var(--amber);"></div>
+        <div class="token-info">
+          <div class="token-name">Amber</div>
+          <div class="token-value">#D97706</div>
+        </div>
+      </div>
+      <div class="token">
+        <div class="token-swatch" style="background:var(--teal);"></div>
+        <div class="token-info">
+          <div class="token-name">Teal</div>
+          <div class="token-value">#0F766E</div>
+        </div>
+      </div>
+      <div class="token">
+        <div class="token-swatch" style="background:var(--success);"></div>
+        <div class="token-info">
+          <div class="token-name">Success</div>
+          <div class="token-value">#16A34A</div>
+        </div>
+      </div>
+      <div class="token">
+        <div class="token-swatch" style="background:var(--error);"></div>
+        <div class="token-info">
+          <div class="token-name">Error</div>
+          <div class="token-value">#DC2626</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TYPOGRAPHY ===== -->
+  <div class="section">
+    <div class="section-heading">03 — Typography</div>
+    <div class="section-desc">Inter for UI and body. Instrument Serif for editorial accents only — headlines that need warmth. JetBrains Mono for code and data.</div>
+
+    <table class="type-table">
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Display</div>
+          <div class="type-spec-detail">Inter 700<br>48 / 1.1<br>-3% tracking</div>
+        </td>
+        <td><span class="type-display-h1">Build decks that <span class="type-accent-serif">move.</span></span></td>
+      </tr>
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Heading</div>
+          <div class="type-spec-detail">Inter 700<br>32 / 1.15<br>-2.5% tracking</div>
+        </td>
+        <td><span class="type-display-h2">AI-powered slide assembly</span></td>
+      </tr>
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Subheading</div>
+          <div class="type-spec-detail">Inter 600<br>22 / 1.25<br>-1.5% tracking</div>
+        </td>
+        <td><span class="type-display-h3">Industry presets, built in</span></td>
+      </tr>
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Body</div>
+          <div class="type-spec-detail">Inter 400<br>15 / 1.7</div>
+        </td>
+        <td><span class="type-display-body">Describe what you need in plain English. Slider picks the right layout, formats your content, and generates presentation-ready slides in seconds.</span></td>
+      </tr>
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Mono</div>
+          <div class="type-spec-detail">JetBrains Mono 400<br>13 / 1.6</div>
+        </td>
+        <td><span class="type-display-mono">slider.generate({ preset: "quarterly-review" })</span></td>
+      </tr>
+      <tr>
+        <td class="type-spec">
+          <div class="type-spec-name">Label</div>
+          <div class="type-spec-detail">Inter 600<br>11 / uppercase<br>+8% tracking</div>
+        </td>
+        <td><span class="type-display-label">Now in early access</span></td>
+      </tr>
+    </table>
+  </div>
+
+  <!-- ===== COMPONENTS ===== -->
+  <div class="section">
+    <div class="section-heading">04 — Components</div>
+
+    <div class="comp-group">
+      <div class="comp-label">Buttons</div>
+      <div class="comp-row">
+        <button class="btn btn-primary btn-lg btn-pill">Join waitlist</button>
+        <button class="btn btn-secondary btn-lg btn-pill">See how it works</button>
+        <button class="btn btn-outline btn-lg btn-pill">Learn more</button>
+      </div>
+      <div class="comp-row" style="margin-top:10px;">
+        <button class="btn btn-primary">Save</button>
+        <button class="btn btn-secondary">Deploy</button>
+        <button class="btn btn-outline">Cancel</button>
+        <button class="btn btn-ghost">View docs →</button>
+      </div>
+    </div>
+
+    <div class="comp-group">
+      <div class="comp-label">Badges</div>
+      <div class="comp-row">
+        <span class="badge badge-default">Default</span>
+        <span class="badge badge-primary">New</span>
+        <span class="badge badge-amber">Pro</span>
+        <span class="badge badge-teal">Built-in</span>
+      </div>
+    </div>
+
+    <div class="comp-group">
+      <div class="comp-label">Feature cards</div>
+      <div class="card-grid">
+        <div class="card">
+          <div class="card-icon">📋</div>
+          <div class="card-title">Industry Presets</div>
+          <div class="card-text">Pre-configured templates for consulting, transit, finance, and healthcare workflows.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">⚡</div>
+          <div class="card-title">Instant Formatting</div>
+          <div class="card-text">Paste raw content. Slider applies layout, hierarchy, and brand-consistent styling automatically.</div>
+        </div>
+        <div class="card">
+          <div class="card-icon">📊</div>
+          <div class="card-title">Smart Charts</div>
+          <div class="card-text">Describe your data in natural language. Get the right chart type, styled and placed.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOKENS ===== -->
+  <div class="section">
+    <div class="section-heading">05 — Token Reference</div>
+    <div class="section-desc">CSS custom properties. Copy directly into your project.</div>
+
+    <div class="code-block"><span class="code-comment">/* Slider Design Tokens */</span>
+<span class="code-key">--primary</span>: <span class="code-value">#C4501E</span>;
+<span class="code-key">--primary-hover</span>: <span class="code-value">#A8431A</span>;
+<span class="code-key">--primary-subtle</span>: <span class="code-value">rgba(196,80,30,0.08)</span>;
+
+<span class="code-key">--gray-950</span>: <span class="code-value">#0C0A09</span>;  <span class="code-comment">/* dark backgrounds */</span>
+<span class="code-key">--gray-900</span>: <span class="code-value">#1C1917</span>;  <span class="code-comment">/* elevated dark */</span>
+<span class="code-key">--gray-100</span>: <span class="code-value">#F5F5F4</span>;  <span class="code-comment">/* subtle backgrounds */</span>
+<span class="code-key">--gray-50</span>:  <span class="code-value">#FAFAF9</span>;  <span class="code-comment">/* page background alt */</span>
+
+<span class="code-key">--amber</span>: <span class="code-value">#D97706</span>;     <span class="code-comment">/* accent, highlights */</span>
+<span class="code-key">--teal</span>: <span class="code-value">#0F766E</span>;      <span class="code-comment">/* secondary, success */</span>
+
+<span class="code-key">--font-sans</span>: <span class="code-string">'Inter', system-ui, sans-serif</span>;
+<span class="code-key">--font-serif</span>: <span class="code-string">'Instrument Serif', Georgia, serif</span>;
+<span class="code-key">--font-mono</span>: <span class="code-string">'JetBrains Mono', monospace</span>;
+
+<span class="code-key">--radius-sm</span>: <span class="code-value">6px</span>;
+<span class="code-key">--radius-md</span>: <span class="code-value">8px</span>;
+<span class="code-key">--radius-lg</span>: <span class="code-value">12px</span>;
+<span class="code-key">--radius-pill</span>: <span class="code-value">999px</span>;</div>
+  </div>
+
+  <!-- ===== DARK PREVIEW ===== -->
+  <div class="section">
+    <div class="section-heading">06 — Hero Preview</div>
+    <div class="section-desc">Light hero treatment for the landing page. The serif italic accent is used sparingly — one word per headline max.</div>
+
+    <div class="hero-block">
+      <nav class="hero-nav">
+        <div class="hero-nav-brand">
+          <svg class="logo-mark" width="28" height="28" viewBox="0 0 36 36" fill="none">
+            <rect class="mark-title" x="3" y="1" width="30" height="5" rx="1.5"/>
+            <rect class="mark-cols" x="3" y="9" width="13" height="5" rx="1"/>
+            <rect class="mark-cols" x="18" y="9" width="15" height="5" rx="1"/>
+            <rect class="mark-chart" x="4" y="21" width="6" height="4" rx=".75"/>
+            <rect class="mark-chart" x="12" y="19" width="6" height="6" rx=".75"/>
+            <rect class="mark-chart" x="20" y="17" width="6" height="8" rx=".75"/>
+            <rect class="mark-accent" x="3" y="28" width="30" height="3" rx="1.5"/>
+            <rect class="mark-footer" x="7" y="33" width="22" height="2" rx="1"/>
+          </svg>
+          Slider
+        </div>
+        <ul class="hero-nav-links">
+          <li><a href="#">Features</a></li>
+          <li><a href="#">Presets</a></li>
+          <li><a href="#">Docs</a></li>
+          <li><a href="#">Pricing</a></li>
+        </ul>
+        <button class="btn btn-primary btn-pill" style="font-size:12px;padding:7px 16px;">Join waitlist</button>
+      </nav>
+
+      <div class="hero-badge">
+        <span class="hero-badge-dot"></span>
+        Now in early access
+      </div>
+
+      <h1 class="hero-heading">
+        Your slides,<br><span class="accent">assembled.</span>
+      </h1>
+      <p class="hero-sub">
+        An AI copilot that lives inside PowerPoint. Describe what you need — Slider handles layout, formatting, charts, and brand consistency.
+      </p>
+      <div class="hero-ctas">
+        <button class="btn btn-primary btn-lg btn-pill">Join the waitlist</button>
+        <button class="btn btn-outline btn-lg btn-pill">How it works</button>
+      </div>
+
+      <div class="hero-stats">
+        <div>
+          <div class="stat-value">40+</div>
+          <div class="stat-label">Industry presets</div>
+        </div>
+        <div>
+          <div class="stat-value">3.2s</div>
+          <div class="stat-label">Avg. generation time</div>
+        </div>
+        <div>
+          <div class="stat-value">12k</div>
+          <div class="stat-label">Decks built in beta</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== USAGE GUIDELINES ===== -->
+  <div class="section">
+    <div class="section-heading">07 — Usage Guidelines</div>
+
+    <div class="usage-grid">
+      <div class="usage-card usage-do">
+        <div class="usage-title">Do</div>
+        <div class="usage-text">Use the serif italic accent on one key word per headline to add warmth. Keep all other text in Inter.</div>
+      </div>
+      <div class="usage-card usage-dont">
+        <div class="usage-title">Don't</div>
+        <div class="usage-text">Set entire paragraphs or UI labels in the serif. It's an accent, not a workhorse.</div>
+      </div>
+      <div class="usage-card usage-do">
+        <div class="usage-title">Do</div>
+        <div class="usage-text">Let the slider reference live in the logo mark and the name. The logo layers are slide assets (title, columns, charts) — that's the wink. The rest of the product is serious tooling.</div>
+      </div>
+      <div class="usage-card usage-dont">
+        <div class="usage-title">Don't</div>
+        <div class="usage-text">Use burger emojis, food photography, or culinary language in product UI or docs. The wink stays in the mark.</div>
+      </div>
+      <div class="usage-card usage-do">
+        <div class="usage-title">Do</div>
+        <div class="usage-text">Use Primary (burnt orange) for a single focal CTA per viewport. Everything else should be secondary or outline.</div>
+      </div>
+      <div class="usage-card usage-dont">
+        <div class="usage-title">Don't</div>
+        <div class="usage-text">Stack multiple orange buttons. If two CTAs sit together, pair primary + outline or primary + ghost.</div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>
