@@ -100,7 +100,17 @@ export async function createSlide(slideData: SlideData) {
       // Get the newly added slide (last one)
       const newSlideIndex = slides.items.length - 1;
       const newSlide = slides.getItemAt(newSlideIndex);
-      newSlide.load("shapes");
+
+      // Load shapes to delete placeholders
+      const shapes = newSlide.shapes;
+      shapes.load("items");
+      await context.sync();
+
+      // Delete all placeholder shapes (like "Click to add title" boxes)
+      const shapesToDelete = shapes.items.slice(); // Create a copy of the array
+      for (const shape of shapesToDelete) {
+        shape.delete();
+      }
       await context.sync();
 
       // Get theme style
@@ -114,7 +124,7 @@ export async function createSlide(slideData: SlideData) {
         const bgRect = newSlide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
         bgRect.left = 0;
         bgRect.top = 0;
-        bgRect.width = 720;
+        bgRect.width = 1000;
         bgRect.height = 540;
         bgRect.fill.setSolidColor(style.backgroundColor);
         bgRect.lineFormat.visible = false;
@@ -174,7 +184,7 @@ export async function createSlide(slideData: SlideData) {
         sourcesBox.textFrame.textRange.font.size = 10;
         sourcesBox.textFrame.textRange.font.italic = true;
         sourcesBox.textFrame.textRange.font.color = "#666666";
-        sourcesBox.fill.setSolidColor("white");
+        sourcesBox.fill.clear(); // Transparent background
         sourcesBox.lineFormat.visible = false;
       }
 

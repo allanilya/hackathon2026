@@ -219,10 +219,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className={styles.container}>
       {/* Active Indicators Row */}
-      {((selectedTheme && selectedTheme !== "professional") || isWebSearchActive) && (
+      {(selectedTheme || isWebSearchActive) && (
         <div className={styles.activeIndicatorRow}>
           {/* Theme Indicator */}
-          {selectedTheme && selectedTheme !== "professional" && (
+          {selectedTheme && (
             <div className={styles.activeIndicatorChip}>
               <PaintBrush24Regular style={{ width: "14px", height: "14px" }} />
               <span>{themeLabels[selectedTheme]}</span>
