@@ -168,6 +168,64 @@ app.post("/api/summarize", async (req, res) => {
   }
 });
 
+app.post("/api/question", async (req, res) => {
+  const { question, slideContent, conversationHistory, conversationId } = req.body as {
+    question: string;
+    slideContent: string;
+    conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+    conversationId?: string;
+  };
+
+  if (!question) {
+    res.status(400).json({ error: "question is required" });
+    return;
+  }
+
+  console.log("[Q&A] Question:", question);
+
+  const systemPrompt = `You are a helpful presentation assistant. The user is working in PowerPoint and asking a question.
+
+You have access to the content of their presentation slides (provided below). Answer the user's question based on the slide content when relevant. If the question is general knowledge that isn't covered by the slides, answer it using your own knowledge but keep answers concise (2-4 sentences).
+
+If slide content is provided, reference specific slides by number when relevant (e.g., "Slide 3 covers...").
+
+Be concise, helpful, and conversational. Respond with plain text only, no JSON or markdown formatting.`;
+
+  let userMessage = question;
+  if (slideContent && slideContent.trim()) {
+    userMessage = `PRESENTATION CONTENT:\n${slideContent}\n\nQUESTION: ${question}`;
+  }
+
+  let ragContext: string[] = [];
+  if (conversationId) {
+    await indexMessage(conversationId, "user", question);
+    ragContext = await retrieveContext(conversationId, question, 5);
+    console.log(`[RAG] Retrieved ${ragContext.length} context chunks for question`);
+  }
+
+  const langchainMessages = toLangChainMessages(
+    systemPrompt,
+    conversationHistory?.slice(-4),
+    userMessage,
+    ragContext
+  );
+
+  try {
+    const response = await generateModel.invoke(langchainMessages);
+    const content = typeof response.content === "string" ? response.content : "";
+
+    if (conversationId && content) {
+      await indexMessage(conversationId, "assistant", content, { type: "qa_answer" });
+    }
+
+    res.json({ answer: content.trim() });
+  } catch (error: unknown) {
+    console.error("[Q&A] LangChain error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
 app.post("/api/search", async (req, res) => {
   const { query, maxResults = 8, slideCount = 3 } = req.body as {
     query: string;

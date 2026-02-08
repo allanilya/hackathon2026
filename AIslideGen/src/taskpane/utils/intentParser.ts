@@ -252,3 +252,81 @@ export function isSlideRequest(text: string): boolean {
   const hasSlideCount = /\b(\d+|a|one|two|three|four|five|six|seven|eight|nine|ten)\s+slide/i.test(lowerText);
   return requestPatterns.test(lowerText) || hasSlideCount;
 }
+
+export interface SummaryIntent {
+  scope: "current_slide" | "full_presentation" | "specific_slide";
+  slideNumber?: number;
+}
+
+/**
+ * Detects if the message is a request to summarize slides.
+ * Must be checked BEFORE isSlideQuestion.
+ */
+export function isSummaryRequest(text: string): SummaryIntent | null {
+  const lowerText = text.toLowerCase();
+
+  // Don't treat "summarize X into slides" as a summary request — that's slide generation
+  if (isSlideRequest(text)) return null;
+
+  const summaryKeywords = /\b(summarize|summary|summarise|recap|overview|tl;?dr)\b/;
+  const whatsOnSlide = /\bwhat('s|\s+is|\s+does)\s+(on\s+)?(this|the|current)\s+slide\b/;
+
+  if (!summaryKeywords.test(lowerText) && !whatsOnSlide.test(lowerText)) return null;
+
+  const fullPresentation = /\b(all\s+slides|entire|whole|full|presentation|slideshow|deck)\b/;
+  const specificSlide = lowerText.match(/\bslide\s+(?:number\s+)?(\d+)\b/);
+
+  if (specificSlide) {
+    return { scope: "specific_slide", slideNumber: parseInt(specificSlide[1], 10) };
+  }
+  if (fullPresentation.test(lowerText)) {
+    return { scope: "full_presentation" };
+  }
+  return { scope: "current_slide" };
+}
+
+export interface SlideQuestionIntent {
+  scope: "current_slide" | "full_presentation" | "specific_slide";
+  slideNumber?: number;
+  question: string;
+}
+
+/**
+ * Detects if the message is a question about slide content or general knowledge.
+ * Catches any question that is NOT a slide creation or edit request.
+ */
+export function isSlideQuestion(text: string): SlideQuestionIntent | null {
+  const lowerText = text.toLowerCase();
+
+  const isQuestionLike = text.includes("?") ||
+    /^(what|who|where|when|why|how|which|tell me|explain|describe|list|can|could|would|should|is|are|do|does|did)\b/i.test(lowerText);
+  if (!isQuestionLike) return null;
+
+  if (isSlideRequest(text)) return null;
+  if (isEditRequest(text)) return null;
+
+  const specificSlideRef = lowerText.match(/\bslide\s+(?:number\s+)?(\d+)\b/);
+  if (specificSlideRef) {
+    return {
+      scope: "specific_slide",
+      slideNumber: parseInt(specificSlideRef[1], 10),
+      question: text,
+    };
+  }
+
+  const fullPresentation = /\b(all\s+slides|entire|whole|full|presentation|slideshow|deck|overall)\b/;
+  const slideContextKeywords = /\b(slide|presentation|deck|bullet|point|topic|covered|content|main\s+point|key\s+point)\b/;
+
+  if (slideContextKeywords.test(lowerText)) {
+    return {
+      scope: fullPresentation.test(lowerText) ? "full_presentation" : "current_slide",
+      question: text,
+    };
+  }
+
+  // General question — still answer it, grounded in current slide context
+  return {
+    scope: "current_slide",
+    question: text,
+  };
+}

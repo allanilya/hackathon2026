@@ -12,7 +12,7 @@ import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent, getSlideShapeDetails, goToSlide } from "../services/slideService";
 import { getDocumentId } from "../services/documentService";
 import { questions } from "../questions";
-import { parseUserIntent, detectsCurrentEvents, hasProvidedUrl, extractUrl, isGreeting, isQuestion, isSlideRequest, isEditRequest, parseEditTarget } from "../utils/intentParser";
+import { parseUserIntent, detectsCurrentEvents, hasProvidedUrl, extractUrl, isGreeting, isQuestion, isSlideRequest, isEditRequest, parseEditTarget, isSummaryRequest, isSlideQuestion } from "../utils/intentParser";
 import { getOrCreateDocumentId } from "../utils/documentId";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -735,6 +735,73 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     }
   }, [persistMessage]);
 
+  const runSlideQuestion = useCallback(async (
+    question: string,
+    scope: "current_slide" | "full_presentation" | "specific_slide",
+    slideNumber?: number
+  ) => {
+    setIsTyping(true);
+
+    try {
+      if (scope === "specific_slide" && slideNumber) {
+        try {
+          await goToSlide(slideNumber);
+        } catch {
+          // Continue anyway with whatever slide is current
+        }
+      }
+
+      let contentText = "";
+      if (scope === "full_presentation") {
+        const allContent = await getAllSlidesContent();
+        contentText = allContent
+          .map((slide, i) => {
+            const parts: string[] = [`Slide ${i + 1}:`];
+            if (slide.title) parts.push(`Title: ${slide.title}`);
+            if (slide.textContent.length > 0) parts.push(slide.textContent.join("\n"));
+            return parts.join("\n");
+          })
+          .join("\n\n") || "";
+      } else {
+        const content = await getSlideContent();
+        const parts: string[] = [];
+        if (content.title) parts.push(`Title: ${content.title}`);
+        if (content.textContent.length > 0) parts.push(content.textContent.join("\n"));
+        contentText = parts.join("\n") || "";
+      }
+
+      const conversationHistory = buildConversationHistory(state.messages);
+
+      const response = await fetch("/api/question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question,
+          slideContent: contentText,
+          conversationHistory,
+          conversationId: activeConversationId,
+        }),
+      });
+
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(errBody.error || `Server error (${response.status})`);
+      }
+
+      const data = await response.json();
+      const answerMsg = makeAssistantMessage(data.answer || "I couldn't find an answer to that question.");
+      dispatch({ type: "ADD_MESSAGE", message: answerMsg });
+      await persistMessage(answerMsg);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to answer question";
+      const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+      dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+      await persistMessage(errorMsg);
+    } finally {
+      setIsTyping(false);
+    }
+  }, [state.messages, buildConversationHistory, persistMessage, activeConversationId]);
+
   const runEditSlide = useCallback(async (editRequest: string) => {
     dispatch({ type: "SET_STEP", step: "editing" });
     setIsTyping(true);
@@ -1067,17 +1134,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 2. Check if it's a question (not a slide request)
-          if (isQuestion(text) && !isSlideRequest(text)) {
-            const questionMsg = makeAssistantMessage(
-              "I'm here to help create presentation slides! You can:\n• Ask me to create slides about a topic\n• Provide a URL to summarize into slides\n• Upload files or images to turn into presentations\n\nWhat would you like to create slides about?"
-            );
-            dispatch({ type: "ADD_MESSAGE", message: questionMsg });
-            await persistMessage(questionMsg);
-            return;
-          }
-
-          // 3. Check if it's an edit request (before slide generation check)
+          // 2. Check if it's an edit request (before slide generation check)
           if (isEditRequest(text)) {
             const editTarget = parseEditTarget(text);
             if (editTarget.scope === "specific" && editTarget.slideNumber) {
@@ -1093,11 +1150,31 @@ const App: React.FC<AppProps> = (props: AppProps) => {
               }
             }
             await runEditSlide(text);
-        
+
             return;
           }
 
-          // 4. Parse user intent from the message
+          // 3. Check if it's a summary request
+          const summaryIntent = isSummaryRequest(text);
+          if (summaryIntent) {
+            if (summaryIntent.scope === "specific_slide" && summaryIntent.slideNumber) {
+              await runSlideQuestion(text, "specific_slide", summaryIntent.slideNumber);
+            } else if (summaryIntent.scope === "full_presentation") {
+              await runSummarize("entire_slideshow");
+            } else {
+              await runSummarize("current_slide");
+            }
+            return;
+          }
+
+          // 4. Check if it's a question about slides or general knowledge
+          const questionIntent = isSlideQuestion(text);
+          if (questionIntent) {
+            await runSlideQuestion(questionIntent.question, questionIntent.scope, questionIntent.slideNumber);
+            return;
+          }
+
+          // 5. Parse user intent from the message
           const intent = parseUserIntent(text);
 
           // 5. Check if user provided a specific URL - if so, fetch that article directly
@@ -1338,17 +1415,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 2. Check if it's a question (not a slide request)
-          if (isQuestion(text) && !isSlideRequest(text)) {
-            const questionMsg = makeAssistantMessage(
-              "I'm here to help create presentation slides! If you'd like me to make slides about something, just let me know the topic. For example: 'Create 3 slides about AI developments' or 'Summarize this article: [URL]'."
-            );
-            dispatch({ type: "ADD_MESSAGE", message: questionMsg });
-            await persistMessage(questionMsg);
-            return;
-          }
-
-          // 3. Check if it's an edit request
+          // 2. Check if it's an edit request
           if (isEditRequest(text)) {
             const editTarget = parseEditTarget(text);
             if (editTarget.scope === "specific" && editTarget.slideNumber) {
@@ -1368,11 +1435,31 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 4. Parse intent for slide generation
+          // 3. Check if it's a summary request
+          const summaryIntentC = isSummaryRequest(text);
+          if (summaryIntentC) {
+            if (summaryIntentC.scope === "specific_slide" && summaryIntentC.slideNumber) {
+              await runSlideQuestion(text, "specific_slide", summaryIntentC.slideNumber);
+            } else if (summaryIntentC.scope === "full_presentation") {
+              await runSummarize("entire_slideshow");
+            } else {
+              await runSummarize("current_slide");
+            }
+            return;
+          }
+
+          // 4. Check if it's a question about slides or general knowledge
+          const questionIntentC = isSlideQuestion(text);
+          if (questionIntentC) {
+            await runSlideQuestion(questionIntentC.question, questionIntentC.scope, questionIntentC.slideNumber);
+            return;
+          }
+
+          // 5. Parse intent for slide generation
           const intent = parseUserIntent(text);
           const needsWebSearch = detectsCurrentEvents(text);
 
-          // 4. Validate input - must have meaningful content for slide generation
+          // 6. Validate input - must have meaningful content for slide generation
           if (!intent.hasAllInfo && text.trim().length < 5) {
             const clarifyMsg = makeAssistantMessage(
               "I'd love to help! What would you like me to create slides about?"
@@ -1527,7 +1614,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
+    [state.step, advanceConversation, generateSlides, runSummarize, runSlideQuestion, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
   );
 
   const handleOptionSelect = useCallback(
