@@ -20,7 +20,7 @@ import {
   updateConversation,
   saveMessage,
 } from "../services/conversationService";
-import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult, Conversation } from "../types";
+import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult, Conversation, ImageData } from "../types";
 
 /* global fetch */
 
@@ -95,6 +95,7 @@ type Action =
   | { type: "SET_SLIDE_COUNT"; count: number }
   | { type: "SET_TONE"; tone: Tone }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
+  | { type: "SET_IMAGE"; image: ImageData | undefined }
   | { type: "RESET" };
 
 const initialState: ConversationState = {
@@ -105,6 +106,7 @@ const initialState: ConversationState = {
   tone: "professional",
   additionalContext: "",
   messages: [],
+  image: undefined,
 };
 
 function chatReducer(state: ConversationState, action: Action): ConversationState {
@@ -123,6 +125,8 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, tone: action.tone };
     case "SET_ADDITIONAL_CONTEXT":
       return { ...state, additionalContext: action.text };
+    case "SET_IMAGE":
+      return { ...state, image: action.image };
     case "RESET":
       return { ...initialState, messages: [] };
     default:
@@ -148,6 +152,10 @@ function getPlaceholder(step: ConversationStep): string {
       return "What would you like to search for?";
     case "web_search_results":
       return "Searching...";
+    case "image_analysis":
+      return "Analyzing image...";
+    case "image_followup":
+      return "Answer the questions above or add more details...";
     case "complete":
       return "Start a new conversation...";
     default:
@@ -251,9 +259,10 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             dispatch({ type: "SET_STEP", step: latest.state.step });
             dispatch({ type: "SET_USER_PROMPT", prompt: latest.state.userPrompt });
             dispatch({ type: "SET_MODE", mode: latest.state.mode });
-            dispatch({ type: "SET_SLIDE_COUNT", count: latest.state.slideCount });
-            dispatch({ type: "SET_TONE", tone: latest.state.tone });
-            dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: latest.state.additionalContext });
+          dispatch({ type: "SET_SLIDE_COUNT", count: latest.state.slideCount });
+          dispatch({ type: "SET_TONE", tone: latest.state.tone });
+          dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: latest.state.additionalContext });
+          dispatch({ type: "SET_IMAGE", image: latest.state.image });
             messages.forEach((msg) => {
               dispatch({ type: "ADD_MESSAGE", message: msg });
             });
@@ -353,10 +362,11 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     setTimeout(() => {
       dispatch({ type: "SET_STEP", step: target.state.step });
       dispatch({ type: "SET_USER_PROMPT", prompt: target.state.userPrompt });
-      dispatch({ type: "SET_MODE", mode: target.state.mode });
-      dispatch({ type: "SET_SLIDE_COUNT", count: target.state.slideCount });
-      dispatch({ type: "SET_TONE", tone: target.state.tone });
-      dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: target.state.additionalContext });
+          dispatch({ type: "SET_MODE", mode: target.state.mode });
+          dispatch({ type: "SET_SLIDE_COUNT", count: target.state.slideCount });
+          dispatch({ type: "SET_TONE", tone: target.state.tone });
+          dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: target.state.additionalContext });
+          dispatch({ type: "SET_IMAGE", image: target.state.image });
       messages.forEach((msg) => {
         dispatch({ type: "ADD_MESSAGE", message: msg });
       });
@@ -504,6 +514,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           additionalContext: searchContext
             ? `${state.additionalContext}\n\nRESEARCH SOURCES:\n${searchContext}`
             : state.additionalContext,
+          image: state.image ? { base64: state.image.base64, mimeType: state.image.mimeType } : undefined,
         }),
       });
 
@@ -838,7 +849,53 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           const parsed = parseInt(option?.value || text, 10);
           const count = isNaN(parsed) ? 3 : Math.max(1, Math.min(10, parsed));
           dispatch({ type: "SET_SLIDE_COUNT", count });
-          await advanceConversation(currentStep);
+          
+          // If we have an image, generate slides with image instead of advancing conversation
+          if (state.image) {
+            dispatch({ type: "SET_STEP", step: "generating" });
+            setIsTyping(true);
+            
+            try {
+              const finalPrompt = state.userPrompt || "";
+              const finalText = finalPrompt + (state.additionalContext ? `\n\n${state.additionalContext}` : "");
+              
+              const response = await fetch("/api/analyze-image", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  image: { base64: state.image.base64, mimeType: state.image.mimeType },
+                  text: finalText || undefined,
+                  slideCount: count,
+                }),
+              });
+
+              if (!response.ok) {
+                const errBody = await response.json().catch(() => ({}));
+                throw new Error(errBody.error || `Server error (${response.status})`);
+              }
+
+              const data = await response.json();
+              setSlides(data.slides || []);
+              dispatch({ type: "SET_STEP", step: "complete" });
+
+              const doneMsg = makeAssistantMessage(
+                `Here are your ${data.slides?.length || 0} slides based on the image${finalText ? " and your input" : ""}! You can insert them individually or all at once into your presentation.`
+              );
+              dispatch({ type: "ADD_MESSAGE", message: doneMsg });
+              persistMessage(doneMsg);
+            } catch (err: unknown) {
+              const message = err instanceof Error ? err.message : "Failed to generate slides";
+              const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+              dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+              persistMessage(errorMsg);
+              dispatch({ type: "SET_STEP", step: state.userPrompt ? "image_followup" : "initial" });
+            } finally {
+              setIsTyping(false);
+            }
+          } else {
+            // Normal flow: advance conversation
+            await advanceConversation(currentStep);
+          }
           break;
         }
 
@@ -871,6 +928,40 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
         case "web_search_query": {
           await runWebSearch(text);
+          break;
+        }
+
+        case "image_followup": {
+          // User is answering follow-up questions or providing additional context
+          // Update user prompt with the text provided
+          if (!state.userPrompt) {
+            dispatch({ type: "SET_USER_PROMPT", prompt: text });
+          } else {
+            dispatch({ type: "SET_ADDITIONAL_CONTEXT", text });
+          }
+          
+          // If we have enough info, ask for slide count before generating
+          if (text.trim().length > 10) {
+            dispatch({ type: "SET_STEP", step: "slideCount" });
+            setIsTyping(true);
+            await delay(400);
+            setIsTyping(false);
+
+            const slideCountMsg = makeAssistantMessage(
+              "Perfect! How many slides would you like me to create?",
+              questions.slideCount.options,
+              questions.slideCount.allowOther
+            );
+            dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
+            persistMessage(slideCountMsg);
+          } else {
+            // Ask for more details
+            const askMsg = makeAssistantMessage(
+              "Could you provide a bit more detail? What would you like the presentation to focus on?"
+            );
+            dispatch({ type: "ADD_MESSAGE", message: askMsg });
+            persistMessage(askMsg);
+          }
           break;
         }
 
@@ -915,6 +1006,82 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       }
     },
     [state.step, advanceConversation, generateSlides, persistMessage]
+  );
+
+  const handleImageUpload = useCallback(
+    async (imageData: ImageData) => {
+      // Create user message with image
+      const userMsg: ChatMessage = {
+        ...makeUserMessage(`Uploaded image: ${imageData.fileName}`),
+        image: imageData,
+      };
+      dispatch({ type: "ADD_MESSAGE", message: userMsg });
+      persistMessage(userMsg);
+      dispatch({ type: "SET_IMAGE", image: imageData });
+
+      // Check if user has provided text along with image
+      const hasText = state.userPrompt.trim().length > 0;
+
+      if (hasText) {
+        // Image + text: ask for slide count before generating
+        dispatch({ type: "SET_STEP", step: "slideCount" });
+        setIsTyping(true);
+        await delay(400);
+        setIsTyping(false);
+
+        const slideCountMsg = makeAssistantMessage(
+          "Great! How many slides would you like me to create?",
+          questions.slideCount.options,
+          questions.slideCount.allowOther
+        );
+        dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
+        persistMessage(slideCountMsg);
+      } else {
+        // Image only: analyze and ask follow-up questions
+        dispatch({ type: "SET_STEP", step: "image_analysis" });
+        setIsTyping(true);
+
+        try {
+          const response = await fetch("/api/analyze-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image: { base64: imageData.base64, mimeType: imageData.mimeType },
+            }),
+          });
+
+          if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            throw new Error(errBody.error || `Server error (${response.status})`);
+          }
+
+          const data = await response.json();
+          dispatch({ type: "SET_STEP", step: "image_followup" });
+
+          // Show analysis and questions
+          const analysisText = data.analysis 
+            ? `I've analyzed your image:\n\n${data.analysis}\n\nTo create a presentation, please answer these questions:`
+            : "I've analyzed your image. To create a presentation, please answer these questions:";
+          
+          const analysisMsg = makeAssistantMessage(
+            analysisText,
+            data.questions?.map((q: string) => ({ label: q, value: q })) || [],
+            true
+          );
+          dispatch({ type: "ADD_MESSAGE", message: analysisMsg });
+          persistMessage(analysisMsg);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Failed to analyze image";
+          const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+          dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+          persistMessage(errorMsg);
+          dispatch({ type: "SET_STEP", step: "initial" });
+        } finally {
+          setIsTyping(false);
+        }
+      }
+    },
+    [state.userPrompt, persistMessage]
   );
 
   const handleReset = useCallback(() => {
@@ -999,6 +1166,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       <ChatInput
         onSend={(text) => handleSend(text)}
         onFileUpload={handleFileUpload}
+        onImageUpload={handleImageUpload}
         disabled={inputDisabled}
         placeholder={getPlaceholder(state.step)}
         currentSlide={currentSlide}
