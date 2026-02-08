@@ -1,20 +1,25 @@
 /* global PowerPoint console */
 
-import type { EditInstruction, ImageData } from "./types";
+import type { EditInstruction, SlideFormat } from "./types";
 
 export type SlideTheme = "professional" | "casual" | "academic" | "creative" | "minimal";
+
+export type SlideLayout =
+  | "title-content"      // Default: Title + bullet points
+  | "title-only"         // Just a title, large centered
+  | "two-column"         // Title + two columns of content
+  | "big-number"         // Large number/stat + description
+  | "quote"              // Large centered quote
+  | "image-left"         // Image on left, content on right
+  | "image-right";       // Image on right, content on left
 
 export interface SlideData {
   title: string;
   bullets: string[];
   sources?: string[];
   theme?: SlideTheme;
-  image?: ImageData;
-  imageLayout?: {
-    position: "left" | "right" | "top" | "bottom" | "center";
-    width: number;
-    height: number;
-  };
+  format?: SlideFormat;
+  layout?: SlideLayout;
 }
 
 interface ThemeStyle {
@@ -93,9 +98,6 @@ const themeStyles: Record<SlideTheme, ThemeStyle> = {
 
 export async function createSlide(slideData: SlideData) {
   try {
-    // Declare image parameters outside PowerPoint.run so they're accessible later
-    let imageInsertParams: { left: number; top: number; width: number; height: number } | undefined;
-
     await PowerPoint.run(async (context) => {
       const presentation = context.presentation;
       const slides = presentation.slides;
@@ -122,8 +124,9 @@ export async function createSlide(slideData: SlideData) {
       }
       await context.sync();
 
-      // Get theme style
+      // Get theme style and layout
       const theme = slideData.theme || "professional";
+      const layout = slideData.layout || "title-content";
       const style = themeStyles[theme];
 
       // Note: Shapes are layered in creation order (first created = bottom layer)
@@ -133,7 +136,7 @@ export async function createSlide(slideData: SlideData) {
         const bgRect = newSlide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
         bgRect.left = 0;
         bgRect.top = 0;
-        bgRect.width = 1000;
+        bgRect.width = 720;
         bgRect.height = 540;
         bgRect.fill.setSolidColor(style.backgroundColor);
         bgRect.lineFormat.visible = false;
@@ -150,101 +153,195 @@ export async function createSlide(slideData: SlideData) {
         accentBar.lineFormat.visible = false;
       }
 
-      // Calculate layout dimensions
-      const slideWidth = 720;
-      const slideHeight = 540;
-      let titleLeft = theme === "minimal" ? 50 : 70;
-      let titleTop = theme === "creative" ? 40 : 50;
-      let titleWidth = 640;
-      let titleHeight = 80;
-      let contentLeft = theme === "minimal" ? 50 : 70;
-      let contentTop = theme === "creative" ? 140 : 150;
-      let contentWidth = 640;
-      let contentHeight = slideData.sources ? 300 : 350;
+// Render content based on layout
+      switch (layout) {
+        case "title-only":
+          // Large centered title only
+          const titleOnlyBox = newSlide.shapes.addTextBox(slideData.title);
+          titleOnlyBox.left = 60;
+          titleOnlyBox.top = 200;
+          titleOnlyBox.width = 600;
+          titleOnlyBox.height = 140;
+          titleOnlyBox.textFrame.textRange.font.size = style.titleSize + 16;
+          titleOnlyBox.textFrame.textRange.font.bold = true;
+          titleOnlyBox.textFrame.textRange.font.color = style.titleColor;
+          titleOnlyBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          titleOnlyBox.fill.clear();
+          titleOnlyBox.lineFormat.visible = false;
+          break;
 
-      // Calculate image layout and adjust text positions if image is provided
+        case "two-column":
+          // Title at top
+          const twoColTitle = newSlide.shapes.addTextBox(slideData.title);
+          twoColTitle.left = theme === "minimal" ? 50 : 70;
+          twoColTitle.top = theme === "creative" ? 40 : 50;
+          twoColTitle.width = 640;
+          twoColTitle.height = 60;
+          twoColTitle.textFrame.textRange.font.size = style.titleSize;
+          twoColTitle.textFrame.textRange.font.bold = style.titleBold;
+          twoColTitle.textFrame.textRange.font.color = style.titleColor;
+          twoColTitle.fill.clear();
+          twoColTitle.lineFormat.visible = false;
 
-      if (slideData.image && slideData.imageLayout) {
-        const layout = slideData.imageLayout;
-        const imgWidth = slideWidth * (layout.width / 100);
-        const imgHeight = slideHeight * (layout.height / 100);
-        let imgLeft: number;
-        let imgTop: number;
+          // Split bullets into two columns
+          const midpoint = Math.ceil(slideData.bullets.length / 2);
+          const leftBullets = slideData.bullets.slice(0, midpoint);
+          const rightBullets = slideData.bullets.slice(midpoint);
 
-        switch (layout.position) {
-          case "left":
-            imgLeft = 30;
-            imgTop = (slideHeight - imgHeight) / 2;
-            // Adjust text boxes to right side
-            titleLeft = imgLeft + imgWidth + 20;
-            titleWidth = slideWidth - titleLeft - 50;
-            contentLeft = imgLeft + imgWidth + 20;
-            contentWidth = slideWidth - contentLeft - 50;
-            break;
+          // Left column
+          const leftCol = newSlide.shapes.addTextBox(leftBullets.map(b => `• ${b}`).join("\n"));
+          leftCol.left = theme === "minimal" ? 50 : 70;
+          leftCol.top = 130;
+          leftCol.width = 300;
+          leftCol.height = slideData.sources ? 280 : 330;
+          leftCol.textFrame.textRange.font.size = style.contentSize;
+          leftCol.textFrame.textRange.font.color = style.contentColor;
+          leftCol.fill.clear();
+          leftCol.lineFormat.visible = false;
 
-          case "right":
-            imgLeft = slideWidth - imgWidth - 30;
-            imgTop = (slideHeight - imgHeight) / 2;
-            // Text stays on left but reduce width
-            titleWidth = imgLeft - titleLeft - 20;
-            contentWidth = imgLeft - contentLeft - 20;
-            break;
+          // Right column
+          const rightCol = newSlide.shapes.addTextBox(rightBullets.map(b => `• ${b}`).join("\n"));
+          rightCol.left = 390;
+          rightCol.top = 130;
+          rightCol.width = 300;
+          rightCol.height = slideData.sources ? 280 : 330;
+          rightCol.textFrame.textRange.font.size = style.contentSize;
+          rightCol.textFrame.textRange.font.color = style.contentColor;
+          rightCol.fill.clear();
+          rightCol.lineFormat.visible = false;
+          break;
 
-          case "top":
-            imgLeft = (slideWidth - imgWidth) / 2;
-            imgTop = 40;
-            // Text boxes move down
-            titleTop = imgTop + imgHeight + 20;
-            contentTop = titleTop + 80;
-            contentHeight = slideHeight - contentTop - (slideData.sources ? 80 : 50);
-            break;
+        case "big-number":
+          // Large number/stat on left, description on right
+          const bigNum = slideData.bullets[0] || "100%";
+          const description = slideData.bullets.slice(1).join("\n");
 
-          case "bottom":
-            imgLeft = (slideWidth - imgWidth) / 2;
-            imgTop = slideHeight - imgHeight - 40;
-            // Text stays at top but reduce height
-            contentHeight = imgTop - contentTop - 20;
-            break;
+          const numberBox = newSlide.shapes.addTextBox(bigNum);
+          numberBox.left = 70;
+          numberBox.top = 150;
+          numberBox.width = 280;
+          numberBox.height = 200;
+          numberBox.textFrame.textRange.font.size = 72;
+          numberBox.textFrame.textRange.font.bold = true;
+          numberBox.textFrame.textRange.font.color = style.accentColor;
+          numberBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          numberBox.fill.clear();
+          numberBox.lineFormat.visible = false;
 
-          case "center":
-            imgLeft = (slideWidth - imgWidth) / 2;
-            imgTop = (slideHeight - imgHeight) / 2;
-            // Reduce content area or overlay (for title-only slides)
-            contentHeight = Math.min(contentHeight, 100);
-            break;
-        }
+          const descBox = newSlide.shapes.addTextBox(description);
+          descBox.left = 370;
+          descBox.top = 150;
+          descBox.width = 320;
+          descBox.height = 200;
+          descBox.textFrame.textRange.font.size = style.contentSize + 2;
+          descBox.textFrame.textRange.font.color = style.contentColor;
+          descBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          descBox.fill.clear();
+          descBox.lineFormat.visible = false;
 
-        // Store parameters for image insertion after PowerPoint.run completes
-        imageInsertParams = { left: imgLeft, top: imgTop, width: imgWidth, height: imgHeight };
+          // Title at top
+          const bigNumTitle = newSlide.shapes.addTextBox(slideData.title);
+          bigNumTitle.left = 70;
+          bigNumTitle.top = 50;
+          bigNumTitle.width = 640;
+          bigNumTitle.height = 60;
+          bigNumTitle.textFrame.textRange.font.size = style.titleSize;
+          bigNumTitle.textFrame.textRange.font.bold = style.titleBold;
+          bigNumTitle.textFrame.textRange.font.color = style.titleColor;
+          bigNumTitle.fill.clear();
+          bigNumTitle.lineFormat.visible = false;
+          break;
+
+        case "quote":
+          // Large centered quote
+          const quoteText = slideData.bullets[0] || slideData.title;
+          const quoteBox = newSlide.shapes.addTextBox(`"${quoteText}"`);
+          quoteBox.left = 100;
+          quoteBox.top = 180;
+          quoteBox.width = 520;
+          quoteBox.height = 180;
+          quoteBox.textFrame.textRange.font.size = style.titleSize + 4;
+          quoteBox.textFrame.textRange.font.italic = true;
+          quoteBox.textFrame.textRange.font.color = style.titleColor;
+          quoteBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          quoteBox.fill.clear();
+          quoteBox.lineFormat.visible = false;
+
+          // Author/source if provided
+          if (slideData.bullets.length > 1) {
+            const authorBox = newSlide.shapes.addTextBox(`— ${slideData.bullets[1]}`);
+            authorBox.left = 100;
+            authorBox.top = 380;
+            authorBox.width = 520;
+            authorBox.height = 40;
+            authorBox.textFrame.textRange.font.size = style.contentSize;
+            authorBox.textFrame.textRange.font.color = style.contentColor;
+            authorBox.fill.clear();
+            authorBox.lineFormat.visible = false;
+          }
+          break;
+
+        case "title-content":
+        default:
+          // Add title text box (created last so it appears on top)
+          const titleBox = newSlide.shapes.addTextBox(slideData.title);
+          titleBox.left = theme === "minimal" ? 50 : 70;
+          titleBox.top = theme === "creative" ? 40 : 50;
+          titleBox.width = 640;
+          titleBox.height = 80;
+          titleBox.textFrame.textRange.font.size = style.titleSize;
+          titleBox.textFrame.textRange.font.bold = style.titleBold;
+          titleBox.textFrame.textRange.font.color = style.titleColor;
+          titleBox.fill.clear();
+          titleBox.lineFormat.visible = false;
+
+          // Build content text based on slide format
+          const format = slideData.format || "bullets";
+          let contentText: string;
+          let contentFontSize: number = style.contentSize;
+
+          switch (format) {
+            case "numbered":
+              contentText = slideData.bullets.map((item, i) => `${i + 1}. ${item}`).join("\n");
+              break;
+            case "paragraph":
+              contentText = slideData.bullets.join("\n\n");
+              break;
+            case "headline":
+              contentText = slideData.bullets[0] || "";
+              contentFontSize = Math.min(style.contentSize + 8, 28);
+              break;
+            case "bullets":
+            default:
+              contentText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
+              break;
+          }
+
+          const contentBox = newSlide.shapes.addTextBox(contentText);
+
+          // Position and size the content box based on theme and format
+          if (format === "headline") {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = 200;
+            contentBox.width = 640;
+            contentBox.height = 200;
+          } else {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = theme === "creative" ? 140 : 150;
+            contentBox.width = 640;
+            contentBox.height = slideData.sources ? 300 : 350;
+          }
+
+          // Style the content box
+          contentBox.textFrame.textRange.font.size = contentFontSize;
+          contentBox.textFrame.textRange.font.color = format === "headline" ? style.titleColor : style.contentColor;
+          if (format === "headline") {
+            contentBox.textFrame.textRange.font.bold = true;
+          }
+          contentBox.fill.clear();
+          contentBox.lineFormat.visible = false;
+          break;
       }
-
-      // Add title text box (created last so it appears on top)
-      const titleBox = newSlide.shapes.addTextBox(slideData.title);
-      titleBox.left = titleLeft;
-      titleBox.top = titleTop;
-      titleBox.width = titleWidth;
-      titleBox.height = titleHeight;
-      titleBox.textFrame.textRange.font.size = style.titleSize;
-      titleBox.textFrame.textRange.font.bold = style.titleBold;
-      titleBox.textFrame.textRange.font.color = style.titleColor;
-      titleBox.fill.clear();
-      titleBox.lineFormat.visible = false;
-
-      // Create bullet points in a text box
-      const bulletText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
-      const contentBox = newSlide.shapes.addTextBox(bulletText);
-
-      // Position and size the content box (using calculated dimensions)
-      contentBox.left = contentLeft;
-      contentBox.top = contentTop;
-      contentBox.width = contentWidth;
-      contentBox.height = contentHeight;
-
-      // Style the content box
-      contentBox.textFrame.textRange.font.size = style.contentSize;
-      contentBox.textFrame.textRange.font.color = style.contentColor;
-      contentBox.fill.clear();
-      contentBox.lineFormat.visible = false;
 
       // Add sources citation box if sources exist
       if (slideData.sources && slideData.sources.length > 0) {
@@ -265,46 +362,8 @@ export async function createSlide(slideData: SlideData) {
         sourcesBox.lineFormat.visible = false;
       }
 
-      // IMPORTANT: Select the newly created slide so setSelectedDataAsync can insert the image
-      if (slideData.image && imageInsertParams) {
-        newSlide.load("id");
-        await context.sync();
-
-        // Select this slide (required for setSelectedDataAsync to work)
-        presentation.setSelectedSlides([newSlide.id]);
-        await context.sync();
-      }
-
       await context.sync();
     });
-
-    // Insert image after slide creation if image data is provided
-    if (slideData.image && imageInsertParams) {
-      await new Promise<void>((resolve, reject) => {
-        // Office.js Common API requires data URL format: data:{mimeType};base64,{base64String}
-        const imageDataUrl = `data:${slideData.image.mimeType};base64,${slideData.image.base64}`;
-
-        Office.context.document.setSelectedDataAsync(
-          imageDataUrl,
-          {
-            coercionType: Office.CoercionType.Image,
-            imageLeft: imageInsertParams.left,
-            imageTop: imageInsertParams.top,
-            imageWidth: imageInsertParams.width,
-            imageHeight: imageInsertParams.height,
-          },
-          (result) => {
-            if (result.status === Office.AsyncResultStatus.Succeeded) {
-              console.log("Successfully inserted image at position:", imageInsertParams);
-              resolve();
-            } else {
-              console.error("Failed to insert image:", result.error?.message);
-              reject(new Error(result.error?.message || "Failed to insert image"));
-            }
-          }
-        );
-      });
-    }
   } catch (error) {
     console.log("Error creating slide: " + error);
     throw error;
@@ -444,8 +503,20 @@ async function addBulletsToContent(bullets: string[]): Promise<void> {
           await context.sync();
 
           const currentText = textFrame.textRange.text;
-          const newBullets = bullets.map((b) => `\u2022 ${b}`).join("\n");
-          textFrame.textRange.text = currentText + "\n" + newBullets;
+
+          // Detect existing format from current text
+          const isNumbered = /^\d+\.\s/.test(currentText.trim());
+          let newContent: string;
+          if (isNumbered) {
+            const existingCount = currentText.split("\n").filter(l => /^\d+\.\s/.test(l.trim())).length;
+            newContent = bullets.map((b, i) => `${existingCount + i + 1}. ${b}`).join("\n");
+          } else if (/^[\u2022\-\*]\s/.test(currentText.trim())) {
+            newContent = bullets.map((b) => `\u2022 ${b}`).join("\n");
+          } else {
+            newContent = bullets.join("\n\n");
+          }
+
+          textFrame.textRange.text = currentText + "\n" + newContent;
           await context.sync();
           return;
         }

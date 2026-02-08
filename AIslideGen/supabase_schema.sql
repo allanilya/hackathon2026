@@ -27,16 +27,15 @@ CREATE TABLE messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Create uploads table for storing image/file metadata
+-- Create uploads table
 CREATE TABLE uploads (
-  id TEXT PRIMARY KEY,
-  conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  type TEXT NOT NULL, -- 'image', 'document', etc.
-  original_name TEXT NOT NULL,
-  file_path TEXT NOT NULL, -- Path in Supabase storage
+  conversation_id TEXT REFERENCES conversations(id) ON DELETE CASCADE,
+  type TEXT NOT NULL,              -- 'image', 'pdf', 'doc'
+  file_path TEXT NOT NULL,         -- Supabase storage path
   mime_type TEXT NOT NULL,
-  size_bytes INTEGER,
+  original_name TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -47,9 +46,8 @@ CREATE INDEX idx_conversations_document_id ON conversations(document_id);
 CREATE INDEX idx_conversations_user_document ON conversations(user_id, document_id);
 CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
 CREATE INDEX idx_messages_timestamp ON messages(timestamp);
-CREATE INDEX idx_uploads_conversation_id ON uploads(conversation_id);
 CREATE INDEX idx_uploads_user_id ON uploads(user_id);
-CREATE INDEX idx_uploads_type ON uploads(type);
+CREATE INDEX idx_uploads_conversation_id ON uploads(conversation_id);
 
 -- Enable Row Level Security (RLS)
 ALTER TABLE conversations ENABLE ROW LEVEL SECURITY;
@@ -105,14 +103,14 @@ CREATE POLICY "Users can delete messages in their conversations"
   );
 
 -- RLS Policies for uploads table
-CREATE POLICY "Users can view their own uploads"
+CREATE POLICY "Users can view their uploads"
   ON uploads FOR SELECT
   USING (auth.uid() = user_id);
 
-CREATE POLICY "Users can insert their own uploads"
+CREATE POLICY "Users can insert their uploads"
   ON uploads FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Users can delete their own uploads"
+CREATE POLICY "Users can delete their uploads"
   ON uploads FOR DELETE
   USING (auth.uid() = user_id);

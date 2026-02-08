@@ -7,7 +7,7 @@ import ConversationSelector from "./ConversationSelector";
 import AuthScreen from "./AuthScreen";
 import { Button, makeStyles, tokens, Spinner } from "@fluentui/react-components";
 import { SignOut20Regular } from "@fluentui/react-icons";
-import { createSlide, applyEdits, SlideTheme } from "../taskpane";
+import { createSlide, applyEdits, SlideTheme, SlideLayout } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent, getSlideShapeDetails, goToSlide } from "../services/slideService";
 import { getDocumentId } from "../services/documentService";
@@ -23,6 +23,8 @@ import {
   saveMessage,
 } from "../services/conversationService";
 import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult, Conversation, ImageData } from "../types";
+import type { ParsedData } from "../utils/dataParser";
+import { createChartImage, getChartTypeName } from "../utils/chartHandler";
 
 /* global fetch */
 
@@ -99,10 +101,9 @@ type Action =
   | { type: "SET_MODE"; mode: Mode }
   | { type: "SET_SLIDE_COUNT"; count: number }
   | { type: "SET_TONE"; tone: Tone }
+  | { type: "SET_LAYOUT"; layout: string }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
   | { type: "SET_IMAGE"; image: ImageData | undefined }
-  | { type: "SET_IMAGE_EMBED_MODE"; embedMode: boolean }
-  | { type: "SET_EXTRACTED_IMAGES"; images: ImageData[] }
   | { type: "CLEAR_SEARCH_RESULTS" }
   | { type: "RESET" };
 
@@ -112,6 +113,7 @@ const initialState: ConversationState = {
   mode: "generate",
   slideCount: 3,
   tone: "professional",
+  layout: "title-content", // Kept for backward-compat with saved conversations; layout is now AI-chosen per slide
   additionalContext: "",
   messages: [],
   image: undefined,
@@ -131,14 +133,15 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, slideCount: action.count };
     case "SET_TONE":
       return { ...state, tone: action.tone };
+    case "SET_LAYOUT":
+      return { ...state, layout: action.layout };
     case "SET_ADDITIONAL_CONTEXT":
       return { ...state, additionalContext: action.text };
     case "SET_IMAGE":
       return { ...state, image: action.image };
-    case "SET_IMAGE_EMBED_MODE":
-      return { ...state, embedMode: action.embedMode };
-    case "SET_EXTRACTED_IMAGES":
-      return { ...state, extractedImages: action.images };
+    case "CLEAR_SEARCH_RESULTS":
+      // Clear search results from messages if needed
+      return state;
     case "RESET":
       return { ...initialState, messages: [] };
     case "CLEAR_SEARCH_RESULTS":
@@ -177,12 +180,6 @@ function getPlaceholder(step: ConversationStep): string {
       return "Searching...";
     case "web_search_permission":
       return "Pick an option above or type your response...";
-    case "image_context":
-      return "Tell me about this image or what you'd like to focus on (optional)...";
-    case "image_upload_choice":
-      return "Pick an option above...";
-    case "file_image_choice":
-      return "Pick an option above...";
     case "image_analysis":
       return "Analyzing image...";
     case "image_followup":
@@ -589,8 +586,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         ? `Creating slides from research about ${topic}...`
         : searchContext
         ? `Creating slides from research...`
-        : state.image
-        ? `Analyzing your image and creating ${state.slideCount} slides...`
         : `Perfect! Generating ${state.slideCount} slides about ${topic}...`
     );
     dispatch({ type: "ADD_MESSAGE", message: genMsg });
@@ -600,116 +595,29 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     const conversationHistory = buildConversationHistory(state.messages);
 
     try {
-      let response;
-      let modifiedData: any = null; // Track if we already parsed and modified the response
-      const hasTextContext = !!(state.userPrompt || state.additionalContext);
-
-      // Decision logic for image handling:
-      // 1. If user provides text context + image → Use text generation (don't analyze image)
-      // 2. If user has image but NO text context → Analyze image content
-      // 3. If no image → Normal text generation
-
-      if (state.image && state.embedMode && hasTextContext) {
-        // User wants to embed image with specific text context
-        // Use text-based generation, then add image reference to slides
-        const imageWithId = state.image as any;
-        const textInput = state.userPrompt || state.additionalContext || "Create slides with this image";
-
-        response = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: textInput,
-            mode: state.mode || "generate",
-            slideCount: state.slideCount,
-            tone: state.tone,
-            additionalContext: state.userPrompt ? state.additionalContext : undefined,
-            conversationHistory,
-            conversationId: activeConversationId,
-          }),
-        });
-
-        // After getting slides, add image reference to them
-        if (response.ok) {
-          modifiedData = await response.json();
-          console.log("[generateSlides] Original slides from API:", modifiedData.slides);
-
-          if (modifiedData.slides && imageWithId.uploadedImageId) {
-            console.log("[generateSlides] Adding image reference with ID:", imageWithId.uploadedImageId);
-            // Add image reference to all slides
-            modifiedData.slides = modifiedData.slides.map((slide: any, index: number) => ({
-              ...slide,
-              images: [{
-                image_id: imageWithId.uploadedImageId,
-                role: "primary",
-                alt_text: slide.title || "Presentation image"
-              }],
-              imageLayout: {
-                position: index % 2 === 0 ? "left" : "right",
-                width: 35,
-                height: 50
-              }
-            }));
-            console.log("[generateSlides] Modified slides with image:", modifiedData.slides);
-          } else if (modifiedData.slides) {
-            console.log("[generateSlides] Adding legacy image data (no uploadedImageId)");
-            // Fallback: Add legacy image data if no uploadedImageId
-            modifiedData.slides = modifiedData.slides.map((slide: any, index: number) => ({
-              ...slide,
-              image: state.image,
-              imageLayout: {
-                position: index % 2 === 0 ? "left" : "right",
-                width: 35,
-                height: 50
-              }
-            }));
-          }
-        }
-      } else if (state.image && state.embedMode !== undefined) {
-        // User wants image analysis (no text context, or analyze-only mode)
-        const imageWithId = state.image as any;
-
-        response = await fetch("/api/analyze-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: {
-              base64: state.image.base64,
-              mimeType: state.image.mimeType,
-            },
-            image_id: imageWithId.uploadedImageId,
-            text: state.userPrompt || state.additionalContext,
-            slideCount: state.slideCount,
-            embedMode: state.embedMode,
-            conversationId: activeConversationId,
-          }),
-        });
-      } else {
-        // Normal text generation (no image)
-        response = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            input: state.userPrompt,
-            mode: state.mode,
-            slideCount: state.slideCount,
-            tone: state.tone,
-            additionalContext: searchContext
-              ? `${state.additionalContext}\n\nRESEARCH SOURCES:\n${searchContext}`
-              : state.additionalContext,
-            conversationHistory,
-            conversationId: activeConversationId,
-          }),
-        });
-      }
+      const response = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          input: state.userPrompt,
+          mode: state.mode,
+          slideCount: state.slideCount,
+          tone: state.tone,
+          additionalContext: searchContext
+            ? `${state.additionalContext}\n\nRESEARCH SOURCES:\n${searchContext}`
+            : state.additionalContext,
+          conversationHistory,
+          conversationId: activeConversationId,
+          image: state.image ? { base64: state.image.base64, mimeType: state.image.mimeType } : undefined,
+        }),
+      });
 
       if (!response.ok) {
         const errBody = await response.json().catch(() => ({}));
         throw new Error(errBody.error || `Server error (${response.status})`);
       }
 
-      // Use modifiedData if we already parsed and modified the response, otherwise parse now
-      const data = modifiedData || await response.json();
+      const data = await response.json();
       const generatedSlides = data.slides || [];
       setSlides(generatedSlides);
       dispatch({ type: "SET_STEP", step: "complete" });
@@ -732,88 +640,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     } finally {
       setIsTyping(false);
     }
-  }, [state.userPrompt, state.mode, state.slideCount, state.tone, state.additionalContext, state.image, state.embedMode, state.messages, buildConversationHistory, persistMessage, activeConversationId]);
-
-  const generateSlidesFromMultipleImages = useCallback(async () => {
-    setIsTyping(true);
-
-    const images = state.extractedImages || [];
-    const imageCount = images.length;
-
-    if (imageCount === 0) {
-      console.error("[Multi-Image] No images to process");
-      return;
-    }
-
-    const genMsg = makeAssistantMessage(
-      `Analyzing ${imageCount} images and creating your slides...`
-    );
-    dispatch({ type: "ADD_MESSAGE", message: genMsg });
-    await persistMessage(genMsg);
-
-    try {
-      const allSlides: GeneratedSlide[] = [];
-
-      // Process each image sequentially to avoid rate limits
-      for (let i = 0; i < images.length; i++) {
-        const image = images[i];
-        console.log(`[Multi-Image] Processing image ${i + 1}/${imageCount}`);
-
-        // Call API for this specific image (slideCount: 1 = one slide per image)
-        const response = await fetch("/api/analyze-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            image: {
-              base64: image.base64,
-              mimeType: image.mimeType,
-            },
-            text: state.userPrompt || state.additionalContext || `Slide ${i + 1}`,
-            slideCount: 1,
-            embedMode: true,
-            conversationId: activeConversationId,
-          }),
-        });
-
-        if (!response.ok) {
-          console.error(`[Multi-Image] Failed on image ${i + 1}`);
-          continue; // Skip failed images, continue with others
-        }
-
-        const data = await response.json();
-        if (data.slides && data.slides.length > 0) {
-          allSlides.push(...data.slides);
-        }
-      }
-
-      if (allSlides.length === 0) {
-        throw new Error("Failed to generate any slides from images");
-      }
-
-      setSlides(allSlides);
-      dispatch({ type: "SET_STEP", step: "complete" });
-
-      const doneMsg = makeAssistantMessage(
-        `Here are your ${allSlides.length} slides! Each one includes an image from your document.`,
-        undefined,
-        undefined,
-        undefined,
-        allSlides
-      );
-      dispatch({ type: "ADD_MESSAGE", message: doneMsg });
-      await persistMessage(doneMsg);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to generate slides";
-      const errorMsg = makeAssistantMessage(
-        `Sorry, something went wrong: ${message}. Please try again.`
-      );
-      dispatch({ type: "ADD_MESSAGE", message: errorMsg });
-      await persistMessage(errorMsg);
-      dispatch({ type: "SET_STEP", step: "anything_else" });
-    } finally {
-      setIsTyping(false);
-    }
-  }, [state.extractedImages, state.userPrompt, state.additionalContext, persistMessage, activeConversationId]);
+  }, [state.userPrompt, state.mode, state.slideCount, state.tone, state.additionalContext, state.messages, buildConversationHistory, persistMessage, activeConversationId]);
 
   const handleSummarize = useCallback(async () => {
     dispatch({ type: "SET_STEP", step: "summarize_ask" });
@@ -1530,16 +1357,9 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             dispatch({ type: "SET_ADDITIONAL_CONTEXT", text });
           }
           dispatch({ type: "SET_STEP", step: "generating" });
+          // Small delay, then generate
           await delay(300);
-
-          // NEW: Check if we're processing multiple extracted images
-          const hasMultipleImages = (state.extractedImages?.length || 0) > 1;
-
-          if (hasMultipleImages && state.embedMode) {
-            await generateSlidesFromMultipleImages();
-          } else {
-            await generateSlides();
-          }
+          await generateSlides();
           break;
         }
 
@@ -1764,184 +1584,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
         }
 
-        case "image_upload_choice": {
-          // Handle user's choice: embed image or analyze only
-          const choice = option?.value || text.toLowerCase();
-
-          if (choice.includes("embed")) {
-            // Store preference: user wants image embedded
-            dispatch({ type: "SET_IMAGE_EMBED_MODE", embedMode: true });
-
-            // Ask for slide count
-            dispatch({ type: "SET_STEP", step: "slideCount" });
-            setIsTyping(true);
-            await delay(400);
-            setIsTyping(false);
-
-            const slideCountMsg = makeAssistantMessage(
-              "Great! How many slides would you like?",
-              questions.slideCount.options,
-              questions.slideCount.allowOther
-            );
-            dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
-            await persistMessage(slideCountMsg);
-          } else if (choice.includes("analyze")) {
-            // Analyze only (text slides)
-            dispatch({ type: "SET_IMAGE_EMBED_MODE", embedMode: false });
-
-            // Ask for slide count
-            dispatch({ type: "SET_STEP", step: "slideCount" });
-            setIsTyping(true);
-            await delay(400);
-            setIsTyping(false);
-
-            const slideCountMsg = makeAssistantMessage(
-              "Perfect! How many text slides would you like me to create based on the image?",
-              questions.slideCount.options,
-              questions.slideCount.allowOther
-            );
-            dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
-            await persistMessage(slideCountMsg);
-          } else {
-            // Invalid response
-            const clarifyMsg = makeAssistantMessage(
-              "Please choose one of the options above or include 'embed' or 'analyze' in your response."
-            );
-            dispatch({ type: "ADD_MESSAGE", message: clarifyMsg });
-            await persistMessage(clarifyMsg);
-          }
-          break;
-        }
-
-        case "image_context": {
-          // User is providing optional context about the image, or skipping
-          const choice = option?.value || text.toLowerCase();
-          let userProvidedContext = "";
-
-          if (choice === "skip" || choice.includes("skip")) {
-            // User wants to skip - don't store any additional context
-            dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: "" });
-          } else if (text.trim().length > 0) {
-            // User provided context - store it in additionalContext
-            userProvidedContext = text.trim();
-            dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: userProvidedContext });
-          }
-
-          // Check if user's text indicates they want to embed the image
-          const { wantsToEmbedImage, parseUserIntent } = await import("../utils/intentParser");
-          const detectEmbed = userProvidedContext && wantsToEmbedImage(userProvidedContext);
-
-          // Also check if user specified slide count
-          const parsedIntent = userProvidedContext ? parseUserIntent(userProvidedContext) : null;
-          const detectedSlideCount = parsedIntent?.slideCount;
-
-          if (detectEmbed) {
-            // User explicitly wants to embed - skip the choice question
-            dispatch({ type: "SET_IMAGE_EMBED_MODE", embedMode: true });
-
-            // Check if they also specified slide count
-            if (detectedSlideCount) {
-              // They specified both embed intent AND slide count - skip both questions
-              dispatch({ type: "SET_SLIDE_COUNT", count: detectedSlideCount });
-              dispatch({ type: "SET_STEP", step: "tone" });
-              setIsTyping(true);
-              await delay(400);
-              setIsTyping(false);
-
-              const toneMsg = makeAssistantMessage(
-                `Perfect! I'll create ${detectedSlideCount} slide${detectedSlideCount > 1 ? 's' : ''}. What tone would you like?`,
-                questions.tone.options,
-                questions.tone.allowOther
-              );
-              dispatch({ type: "ADD_MESSAGE", message: toneMsg });
-              await persistMessage(toneMsg);
-            } else {
-              // Only embed detected - ask for slide count
-              dispatch({ type: "SET_STEP", step: "slideCount" });
-              setIsTyping(true);
-              await delay(400);
-              setIsTyping(false);
-
-              const slideCountMsg = makeAssistantMessage(
-                "Great! How many slides would you like?",
-                questions.slideCount.options,
-                questions.slideCount.allowOther
-              );
-              dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
-              await persistMessage(slideCountMsg);
-            }
-          } else {
-            // Unclear intent - ask them to choose
-            dispatch({ type: "SET_STEP", step: "image_upload_choice" });
-            setIsTyping(true);
-            await delay(400);
-            setIsTyping(false);
-
-            const choiceMsg = makeAssistantMessage(
-              "How would you like me to use this image?",
-              [
-                { label: "Embed image in slides with text", value: "embed" },
-                { label: "Just analyze and create text slides", value: "analyze" },
-              ]
-            );
-            dispatch({ type: "ADD_MESSAGE", message: choiceMsg });
-            await persistMessage(choiceMsg);
-          }
-          break;
-        }
-
-        case "file_image_choice": {
-          // Handle user's choice: include images from DOCX or not
-          const choice = option?.value || text.toLowerCase();
-
-          if (choice.includes("include") || choice.includes("yes")) {
-            // User wants to include images from DOCX
-            dispatch({ type: "SET_IMAGE_EMBED_MODE", embedMode: true });
-
-            // NEW: Auto-set slide count based on number of extracted images
-            const imageCount = state.extractedImages?.length || 0;
-
-            if (imageCount > 0) {
-              console.log(`[Multi-Image] Found ${imageCount} images, auto-setting slide count`);
-              dispatch({ type: "SET_SLIDE_COUNT", count: imageCount });
-
-              // Show confirmation and skip directly to mode question
-              setIsTyping(true);
-              await delay(400);
-              setIsTyping(false);
-
-              const confirmMsg = makeAssistantMessage(
-                `Perfect! I'll create ${imageCount} slides, one for each image. What type of presentation would you like?`,
-                questions.mode.options,
-                questions.mode.allowOther
-              );
-              dispatch({ type: "ADD_MESSAGE", message: confirmMsg });
-              await persistMessage(confirmMsg);
-
-              // Skip slideCount question - go directly to mode
-              dispatch({ type: "SET_STEP", step: "mode" });
-            } else {
-              // No images, proceed with normal flow
-              await advanceConversation("initial");
-            }
-          } else if (choice.includes("text") || choice.includes("no")) {
-            // User wants text-only slides
-            dispatch({ type: "SET_IMAGE_EMBED_MODE", embedMode: false });
-            dispatch({ type: "SET_EXTRACTED_IMAGES", images: [] });
-
-            // Proceed with conversation flow
-            await advanceConversation("initial");
-          } else {
-            // Invalid response
-            const clarifyMsg = makeAssistantMessage(
-              "Please choose one of the options above or include 'yes/include' or 'no/text' in your response."
-            );
-            dispatch({ type: "ADD_MESSAGE", message: clarifyMsg });
-            await persistMessage(clarifyMsg);
-          }
-          break;
-        }
-
         case "edit_complete": {
           // User is continuing after a successful edit
           if (isEditRequest(text)) {
@@ -1977,7 +1619,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, generateSlidesFromMultipleImages, runSummarize, runSlideQuestion, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
+    [state.step, advanceConversation, generateSlides, runSummarize, runSlideQuestion, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
   );
 
   const handleOptionSelect = useCallback(
@@ -1996,31 +1638,12 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   );
 
   const handleFileUpload = useCallback(
-    async (fileName: string, extractedText: string, extractedImages?: ImageData[]) => {
+    async (fileName: string, extractedText: string) => {
       if (state.step === "initial") {
         const userMsg = makeUserMessage(`Uploaded: ${fileName}`);
         dispatch({ type: "ADD_MESSAGE", message: userMsg });
         await persistMessage(userMsg);
-
         dispatch({ type: "SET_USER_PROMPT", prompt: extractedText });
-
-        // If images found in DOCX, ask user if they want to include them
-        if (extractedImages && extractedImages.length > 0) {
-          dispatch({ type: "SET_EXTRACTED_IMAGES", images: extractedImages });
-
-          const imageMsg = makeAssistantMessage(
-            `I found ${extractedImages.length} image(s) in your document. Would you like to include them in the slides?`,
-            [
-              { label: "Yes, include images", value: "include" },
-              { label: "No, text only", value: "text_only" },
-            ]
-          );
-          dispatch({ type: "ADD_MESSAGE", message: imageMsg });
-          await persistMessage(imageMsg);
-          dispatch({ type: "SET_STEP", step: "file_image_choice" });
-          return;
-        }
-
         await advanceConversation("initial");
       } else if (state.step === "anything_else") {
         const userMsg = makeUserMessage(`Uploaded: ${fileName}`);
@@ -2037,56 +1660,149 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
   const handleImageUpload = useCallback(
     async (imageData: ImageData) => {
-      // Upload image to Supabase storage and get image_id
-      let uploadedImageId: string | undefined;
-
-      if (activeConversationId) {
-        try {
-          const { uploadImage } = await import("../services/uploadService");
-          const uploadResult = await uploadImage(activeConversationId, {
-            name: imageData.fileName,
-            base64: imageData.base64,
-            mimeType: imageData.mimeType,
-          });
-          uploadedImageId = uploadResult.id;
-          console.log(`[handleImageUpload] Uploaded image to Supabase with ID: ${uploadedImageId}`);
-        } catch (error) {
-          console.error("[handleImageUpload] Failed to upload to Supabase:", error);
-          // Continue without Supabase storage - will use legacy base64 flow
-        }
-      }
-
-      // Create user message with image (store both ID and data)
+      // Create user message with image
       const userMsg: ChatMessage = {
         ...makeUserMessage(`Uploaded image: ${imageData.fileName}`),
-        image: { ...imageData, uploadedImageId } as any, // Store uploadedImageId for later use
+        image: imageData,
       };
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
       await persistMessage(userMsg);
-      dispatch({ type: "SET_IMAGE", image: { ...imageData, uploadedImageId } as any });
+      dispatch({ type: "SET_IMAGE", image: imageData });
 
-      // NEW: First ask for optional context about the image
-      dispatch({ type: "SET_STEP", step: "image_context" });
-      setIsTyping(true);
-      await delay(400);
-      setIsTyping(false);
+      // Check if user has provided text along with image
+      const hasText = state.userPrompt.trim().length > 0;
 
-      const contextMsg = makeAssistantMessage(
-        "Great! Tell me what this image is about or what you'd like me to focus on. (Or skip this step)",
-        [
-          { label: "Skip - just analyze the image", value: "skip" },
-        ],
-        true  // allowOther = true (user can type free text)
-      );
-      dispatch({ type: "ADD_MESSAGE", message: contextMsg });
-      await persistMessage(contextMsg);
+      if (hasText) {
+        // Image + text: ask for slide count before generating
+        dispatch({ type: "SET_STEP", step: "slideCount" });
+        setIsTyping(true);
+        await delay(400);
+        setIsTyping(false);
+
+        const slideCountMsg = makeAssistantMessage(
+          "Great! How many slides would you like me to create?",
+          questions.slideCount.options,
+          questions.slideCount.allowOther
+        );
+        dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
+        await persistMessage(slideCountMsg);
+      } else {
+        // Image only: analyze and ask follow-up questions
+        dispatch({ type: "SET_STEP", step: "image_analysis" });
+        setIsTyping(true);
+
+        try {
+          const response = await fetch("/api/analyze-image", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              image: { base64: imageData.base64, mimeType: imageData.mimeType },
+            }),
+          });
+
+          if (!response.ok) {
+            const errBody = await response.json().catch(() => ({}));
+            throw new Error(errBody.error || `Server error (${response.status})`);
+          }
+
+          const data = await response.json();
+          dispatch({ type: "SET_STEP", step: "image_followup" });
+
+          // Show analysis and questions
+          const analysisText = data.analysis
+            ? `I've analyzed your image:\n\n${data.analysis}\n\nTo create a presentation, please answer these questions:`
+            : "I've analyzed your image. To create a presentation, please answer these questions:";
+
+          const analysisMsg = makeAssistantMessage(
+            analysisText,
+            data.questions?.map((q: string) => ({ label: q, value: q })) || [],
+            true
+          );
+          dispatch({ type: "ADD_MESSAGE", message: analysisMsg });
+          await persistMessage(analysisMsg);
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : "Failed to analyze image";
+          const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
+          dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+          await persistMessage(errorMsg);
+          dispatch({ type: "SET_STEP", step: "initial" });
+        } finally {
+          setIsTyping(false);
+        }
+      }
     },
-    [persistMessage, activeConversationId]
+    [state.userPrompt, persistMessage]
+  );
+
+  const handleDataUpload = useCallback(
+    async (parsedData: ParsedData) => {
+      const userMsg = makeUserMessage(`Uploaded data file: ${parsedData.fileName}`);
+      dispatch({ type: "ADD_MESSAGE", message: userMsg });
+      await persistMessage(userMsg);
+
+      setIsTyping(true);
+
+      const analyzingMsg = makeAssistantMessage("Analyzing your data and generating chart...");
+      dispatch({ type: "ADD_MESSAGE", message: analyzingMsg });
+      await persistMessage(analyzingMsg);
+
+      try {
+        // Call backend to generate chart image
+        const response = await fetch("/api/chart/generate-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            headers: parsedData.headers,
+            rows: parsedData.rows,
+            columnTypes: parsedData.columnTypes,
+            fileName: parsedData.fileName,
+          }),
+        });
+
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.error || `Server error (${response.status})`);
+        }
+
+        const data = await response.json();
+        const recommendation = data.recommendation;
+        const base64Presentation = data.presentation;
+
+        const creatingMsg = makeAssistantMessage(
+          `Creating ${getChartTypeName(recommendation.chartType)}: "${recommendation.title}"...\n\n${recommendation.reasoning}`
+        );
+        dispatch({ type: "ADD_MESSAGE", message: creatingMsg });
+        await persistMessage(creatingMsg);
+
+        // Insert the chart slide into PowerPoint
+        await createChartImage(base64Presentation);
+
+        const successMsg = makeAssistantMessage(
+          `Done! I've created a ${getChartTypeName(recommendation.chartType).toLowerCase()} on the current slide with ${parsedData.rows.length} rows of data.`
+        );
+        dispatch({ type: "ADD_MESSAGE", message: successMsg });
+        await persistMessage(successMsg);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Failed to create chart";
+        const errorMsg = makeAssistantMessage(
+          `Sorry, something went wrong: ${message}. Please try again.`
+        );
+        dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+        await persistMessage(errorMsg);
+      } finally {
+        setIsTyping(false);
+      }
+    },
+    [persistMessage]
   );
 
   const handleThemeChange = useCallback((theme: SlideTheme) => {
     // Map SlideTheme to Tone (they're compatible)
     dispatch({ type: "SET_TONE", tone: theme as Tone });
+  }, []);
+
+  const handleLayoutChange = useCallback((layout: SlideLayout) => {
+    dispatch({ type: "SET_LAYOUT", layout: layout as string });
   }, []);
 
   const handleEditSlide = useCallback(async () => {
@@ -2099,67 +1815,27 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   }, [persistMessage]);
 
   const handleInsertSlide = async (slide: GeneratedSlide) => {
-    // Fetch image data by ID if slide references an image
-    let imageData = slide.image; // Use legacy format if present
-
-    if (!imageData && slide.images && slide.images.length > 0) {
-      // Fetch image data by ID from Supabase
-      const primaryImage = slide.images.find(img => img.role === "primary") || slide.images[0];
-      try {
-        const { downloadImageAsBase64 } = await import("../services/uploadService");
-        const { base64, mimeType } = await downloadImageAsBase64(primaryImage.image_id);
-        imageData = {
-          fileName: primaryImage.alt_text || "image",
-          base64,
-          mimeType,
-        };
-        console.log(`[handleInsertSlide] Fetched image ${primaryImage.image_id} for slide`);
-      } catch (error) {
-        console.error(`[handleInsertSlide] Failed to fetch image ${primaryImage.image_id}:`, error);
-        // Continue without image
-      }
-    }
 
     await createSlide({
       title: slide.title,
       bullets: slide.bullets,
       sources: slide.sources,
       theme: state.tone as SlideTheme,
-      image: imageData,
-      imageLayout: slide.imageLayout,
+      layout: (slide.layout || "title-content") as SlideLayout,
+      format: slide.format
     });
   };
 
   const handleInsertAll = async () => {
     for (const slide of slides) {
-      // Fetch image data by ID if slide references an image
-      let imageData = slide.image; // Use legacy format if present
-
-      if (!imageData && slide.images && slide.images.length > 0) {
-        // Fetch image data by ID from Supabase
-        const primaryImage = slide.images.find(img => img.role === "primary") || slide.images[0];
-        try {
-          const { downloadImageAsBase64 } = await import("../services/uploadService");
-          const { base64, mimeType } = await downloadImageAsBase64(primaryImage.image_id);
-          imageData = {
-            fileName: primaryImage.alt_text || "image",
-            base64,
-            mimeType,
-          };
-          console.log(`[handleInsertAll] Fetched image ${primaryImage.image_id} for slide`);
-        } catch (error) {
-          console.error(`[handleInsertAll] Failed to fetch image ${primaryImage.image_id}:`, error);
-          // Continue without image
-        }
-      }
 
       await createSlide({
         title: slide.title,
         bullets: slide.bullets,
         sources: slide.sources,
         theme: state.tone as SlideTheme,
-        image: imageData,
-        imageLayout: slide.imageLayout,
+        layout: (slide.layout || "title-content") as SlideLayout,
+        format: slide.format
       });
     }
   };
@@ -2218,6 +1894,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onSend={(text) => handleSend(text)}
         onFileUpload={handleFileUpload}
         onImageUpload={handleImageUpload}
+        onDataUpload={handleDataUpload}
         disabled={inputDisabled}
         placeholder={getPlaceholder(state.step)}
         currentSlide={currentSlide}
@@ -2228,6 +1905,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onDismissWebSearch={handleDismissWebSearch}
         selectedTheme={state.tone as SlideTheme}
         onThemeChange={handleThemeChange}
+        selectedLayout={state.layout as SlideLayout}
+        onLayoutChange={handleLayoutChange}
         onEditSlide={handleEditSlide}
       />
     </div>

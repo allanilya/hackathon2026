@@ -1,20 +1,20 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
-import OpenAI from "openai";
 import { ChatOpenAI } from "@langchain/openai";
 import { TavilySearch } from "@langchain/tavily";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import { indexMessage, indexSlides, retrieveContext, seedConversation } from "./ragStore";
+import chartRouter from "./routes/chart";
 
 dotenv.config();
 
 const app = express();
-app.use(express.json({ limit: "100mb" })); // Increased limit for base64 images
+app.use(express.json({ limit: "100mb" }));
 app.use(cors({ origin: "https://localhost:3000" }));
 
-// OpenAI client for GPT-4 Vision (image analysis)
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+// Register chart routes
+app.use("/api/chart", chartRouter);
 
 // ChatOpenAI for slide generation and summarization (temperature 0.7)
 const generateModel = new ChatOpenAI({ model: "gpt-4o", temperature: 0.7 });
@@ -46,17 +46,73 @@ function toLangChainMessages(
   return messages;
 }
 
+const FORMAT_GUIDELINES = `
+CONTENT FORMAT - Choose the best "format" for each slide:
+- "bullets": Use for listing discrete items, features, facts, or comparisons. 2-7 bullet points.
+- "numbered": Use for sequential steps, ranked lists, processes, or timelines. 2-7 items.
+- "paragraph": Use for narrative explanations, summaries, conclusions, or contextual overviews. 1-3 entries, each a full paragraph (2-4 sentences).
+- "headline": Use for title/transition slides, section dividers, or impactful single-statement slides. 1-2 entries: a main statement and optionally a subtitle.
+VARIETY: Vary the format across slides for visual interest. Do NOT use the same format for every slide.`;
+
+const LAYOUT_GUIDELINES = `
+SLIDE LAYOUT - Choose the best "layout" for each slide based on its content:
+- "title-content": Standard layout with title and content below. Best for most slides with bullet points, numbered lists, paragraphs, or general information.
+- "title-only": Large centered title with no body content. Use for opening/closing slides, section dividers, or dramatic single-statement slides. When using this layout, the "bullets" array should be empty [].
+- "two-column": Title with content split into two columns. Use when comparing two things side-by-side, showing pros/cons, or presenting parallel information. Needs 4+ bullet points to split evenly.
+- "big-number": Large prominent number/statistic with supporting description. Use when a slide centers around a key metric, percentage, or statistic. First bullet should be the number/stat (e.g., "95%", "$2.4B", "10x"), remaining bullets are the description.
+- "quote": Large centered quote. Use for notable quotes, testimonials, or impactful statements. First bullet is the quote text, optional second bullet is the attribution/author.
+VARIETY: Vary layouts across slides for visual interest. Do NOT use "title-content" for every slide - pick the layout that best fits each slide's content.`;
+
+const FORMAT_EXAMPLES = `
+FORMAT VALUES: "bullets" | "numbered" | "paragraph" | "headline"
+LAYOUT VALUES: "title-content" | "title-only" | "two-column" | "big-number" | "quote"
+EXAMPLES:
+- Bullets:    { "title": "Key Features", "layout": "title-content", "format": "bullets", "bullets": ["Fast performance", "Easy to use", "Scalable architecture"] }
+- Numbered:   { "title": "Setup Steps", "layout": "title-content", "format": "numbered", "bullets": ["Install the CLI tool", "Configure your environment", "Run the initialization command"] }
+- Two-Column: { "title": "Pros vs Cons", "layout": "two-column", "format": "bullets", "bullets": ["Pro: Fast performance", "Pro: Easy setup", "Con: Limited plugins", "Con: Steep learning curve"] }
+- Big Number: { "title": "Market Growth", "layout": "big-number", "format": "bullets", "bullets": ["340%", "Year-over-year growth in AI adoption across enterprise companies since 2024"] }
+- Quote:      { "title": "Industry Perspective", "layout": "quote", "format": "bullets", "bullets": ["The best way to predict the future is to invent it.", "Alan Kay"] }
+- Headline:   { "title": "The Future of AI", "layout": "title-only", "format": "headline", "bullets": [] }
+- Paragraph:  { "title": "Executive Summary", "layout": "title-content", "format": "paragraph", "bullets": ["The project achieved a 40% improvement in processing speed. This was driven by the new caching layer and database optimizations.", "Looking ahead, the team plans to focus on horizontal scaling to handle projected traffic increases."] }`;
+
 const systemPrompts: Record<Mode, string> = {
   generate:
-    "You are a presentation expert. Create slides with specific, valuable information - not generic statements. Each slide must contain concrete facts, actionable insights, or specific examples. Use clear titles and 3-5 concise, informative bullet points. Avoid meta-commentary or process descriptions.",
+    `You are a presentation expert. Create slides with specific, valuable information - not generic statements. Each slide must contain concrete facts, actionable insights, or specific examples. Use clear titles. Avoid meta-commentary or process descriptions.
+
+${FORMAT_GUIDELINES}
+
+${LAYOUT_GUIDELINES}`,
   summarize:
-    "You are a summarization expert. Extract the most important facts, insights, and takeaways from the content. Focus on specific information, key findings, and concrete details. Avoid generic summaries - be specific and informative.",
+    `You are a summarization expert. Extract the most important facts, insights, and takeaways from the content. Focus on specific information, key findings, and concrete details. Avoid generic summaries - be specific and informative.
+
+${FORMAT_GUIDELINES}
+Prefer "paragraph" for narrative summaries, "bullets" for key takeaways, "numbered" for sequential findings.
+
+${LAYOUT_GUIDELINES}`,
   compare:
-    "You are an analysis expert. Create detailed comparisons with specific differences, concrete examples, and quantifiable metrics where possible. Include factual distinctions, real-world implications, and data-driven insights. Avoid vague comparisons.",
+    `You are an analysis expert. Create detailed comparisons with specific differences, concrete examples, and quantifiable metrics where possible. Include factual distinctions, real-world implications, and data-driven insights. Avoid vague comparisons.
+
+${FORMAT_GUIDELINES}
+Use "bullets" for side-by-side comparison points, "numbered" for ranked differences, "paragraph" for nuanced analysis.
+
+${LAYOUT_GUIDELINES}
+Prefer "two-column" for direct comparisons.`,
   proscons:
-    "You are a critical thinking expert. Provide specific, concrete pros and cons with real examples and evidence. Include factual benefits and drawbacks, not generic observations. Support claims with specifics.",
+    `You are a critical thinking expert. Provide specific, concrete pros and cons with real examples and evidence. Include factual benefits and drawbacks, not generic observations. Support claims with specifics.
+
+${FORMAT_GUIDELINES}
+Use "bullets" for pros and cons lists. Optionally use "paragraph" for an overall assessment slide.
+
+${LAYOUT_GUIDELINES}
+Prefer "two-column" for pros vs cons slides.`,
   research:
-    "You are a research expert. Extract ONLY information that appears in the provided research sources - do NOT use general knowledge. Focus on CURRENT, SPECIFIC events: exact dates (e.g., 'On Feb 5, 2026...'), recent developments, specific people/places, breaking news, statistics with numbers, and concrete events from the sources. You may use shorthand citations like 'According to [source name]...' or 'Reuters reports...' in bullet points. Prioritize the most recent and newsworthy information. Avoid generic background - focus on what's happening NOW based on the sources.",
+    `You are a research expert. Extract ONLY information that appears in the provided research sources - do NOT use general knowledge. Focus on CURRENT, SPECIFIC events: exact dates (e.g., 'On Feb 5, 2026...'), recent developments, specific people/places, breaking news, statistics with numbers, and concrete events from the sources. You may use shorthand citations like 'According to [source name]...' or 'Reuters reports...' in bullet points. Prioritize the most recent and newsworthy information. Avoid generic background - focus on what's happening NOW based on the sources.
+
+${FORMAT_GUIDELINES}
+Use "numbered" for chronological developments, "bullets" for key findings, "paragraph" for analysis or context.
+
+${LAYOUT_GUIDELINES}
+Use "big-number" for key statistics from research. Use "quote" for notable expert statements.`,
 };
 
 app.post("/api/generate", async (req, res) => {
@@ -79,12 +135,17 @@ app.post("/api/generate", async (req, res) => {
 
   console.log("Generate request - Mode:", mode, "Has research sources:", hasResearchSources);
 
-  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"] }] }`;
+  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+
+${FORMAT_EXAMPLES}`;
   let citationInstructions = "";
 
   if (hasResearchSources && mode === "research") {
     console.log("Including sources in JSON format");
-    jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }`;
+    jsonFormat = `{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }
+
+${FORMAT_EXAMPLES}
+Each slide may also include a "sources" array with full URLs.`;
     citationInstructions = "\n\nIMPORTANT: For each slide that uses information from the research sources, include a 'sources' array with the FULL URLs of the sources used (e.g., ['https://www.nytimes.com/article', 'https://www.reuters.com/news']). Include complete URLs with https:// protocol. If a slide doesn't use any research sources, omit the 'sources' field or set it to an empty array.";
   }
 
@@ -125,12 +186,31 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+
+    // Validate and default format and layout fields on each slide
+    const validFormats = ["bullets", "numbered", "paragraph", "headline"];
+    const validLayouts = ["title-content", "title-only", "two-column", "big-number", "quote"];
+    if (parsed.slides) {
+      for (const s of parsed.slides) {
+        if (!s.format || !validFormats.includes(s.format)) {
+          s.format = "bullets";
+        }
+        if (!s.layout || !validLayouts.includes(s.layout)) {
+          s.layout = "title-content";
+        }
+      }
+    }
+
     console.log("Generated slides:", JSON.stringify(parsed, null, 2));
 
     // RAG: Index the generated slides for future retrieval
     if (conversationId && parsed.slides) {
       const slidesSummary = parsed.slides
-        .map((s: any, i: number) => `Slide ${i + 1}: ${s.title} - ${s.bullets.join("; ")}`)
+        .map((s: any, i: number) => {
+          const fmt = s.format || "bullets";
+          const content = fmt === "paragraph" ? s.bullets.join(" ") : s.bullets.join("; ");
+          return `Slide ${i + 1} [${fmt}]: ${s.title} - ${content}`;
+        })
         .join("\n");
       await indexSlides(conversationId, parsed.slides);
       await indexMessage(conversationId, "assistant", slidesSummary, { type: "slide_summary" });
@@ -352,160 +432,111 @@ app.post("/api/fetch-article", async (req, res) => {
   }
 });
 
-/**
- * Calculate a default image layout when GPT-4 Vision doesn't provide one.
- * Alternates positions for variety.
- */
-function calculateDefaultImageLayout(slideIndex: number): {
-  position: "left" | "right" | "top" | "bottom" | "center";
-  width: number;
-  height: number;
-} {
-  // Alternate left/right positions for variety
-  const isEven = slideIndex % 2 === 0;
-
-  return {
-    position: isEven ? "left" : "right",
-    width: 35,  // 35% of slide width
-    height: 50, // 50% of slide height
-  };
-}
-
-// ── Image Analysis Endpoint with GPT-4 Vision ──
 app.post("/api/analyze-image", async (req, res) => {
-  const { image, text, slideCount, embedMode, conversationId } = req.body as {
+  const { image, text, slideCount } = req.body as {
     image: { base64: string; mimeType: string };
     text?: string;
-    slideCount: number;
-    embedMode: boolean;
-    conversationId?: string;
+    slideCount?: number;
   };
 
-  if (!image || !image.base64 || !image.mimeType) {
-    res.status(400).json({ error: "Image data (base64 and mimeType) is required" });
+  if (!image || !image.base64) {
+    res.status(400).json({ error: "image is required" });
     return;
   }
 
-  if (typeof slideCount !== "number" || slideCount < 1 || slideCount > 10) {
-    res.status(400).json({ error: "slideCount must be between 1 and 10" });
-    return;
-  }
-
-  console.log(`[Image Analysis] Analyzing image (embed: ${embedMode}, slides: ${slideCount})`);
+  console.log("[Image Analysis] Received image request", { hasText: !!text, slideCount });
 
   try {
-    // Use GPT-4 Vision to analyze image
-    const visionPrompt = embedMode
-      ? `Analyze this image and create ${slideCount} slides that include the image with relevant text.
-         For each slide, suggest:
-         - Title
-         - 2-4 bullet points
-         - Optimal image position (left/right/top/bottom/center)
-         - Image dimensions (width %, height %)
+    // Convert base64 to data URL for LangChain
+    const imageUrl = `data:${image.mimeType};base64,${image.base64}`;
 
-         ${text ? `User context: ${text}` : ""}
+    // If text and slideCount are provided, generate slides
+    if (text && slideCount) {
+      console.log("[Image Analysis] Generating slides from image + text");
+      
+      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and choose the optimal content format and layout for each slide. Avoid meta-commentary or process descriptions.
 
-         Consider image aspect ratio when suggesting position:
-         - Wide/landscape images work better at top or bottom
-         - Tall/portrait images work better at left or right
-         - Square images are flexible
+${FORMAT_GUIDELINES}
 
-         Return JSON in this exact format: { "slides": [{ "title": "...", "bullets": ["..."], "imageLayout": { "position": "left", "width": 40, "height": 60 } }] }`
-      : `Analyze this image and create ${slideCount} text-only slides describing its content in detail.
-         ${text ? `User context: ${text}` : ""}
+${LAYOUT_GUIDELINES}
 
-         Return JSON in this exact format: { "slides": [{ "title": "...", "bullets": ["..."] }] }`;
+Respond ONLY with valid JSON in this exact format:
+{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o", // Supports vision
-      messages: [
-        {
-          role: "user",
+${FORMAT_EXAMPLES}
+
+Generate exactly ${slideCount} slides. Do not include any text outside the JSON.`;
+
+      const userMessage = text || "Create a presentation based on this image.";
+
+      // Create message with image - LangChain supports images in content array
+      const messages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage({
           content: [
-            { type: "text", text: visionPrompt },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:${image.mimeType};base64,${image.base64}`,
-              },
-            },
+            { type: "text", text: userMessage },
+            { type: "image_url", image_url: { url: imageUrl } },
           ],
-        },
-      ],
-      temperature: 0.7,
-    });
+        } as any), // Type assertion needed for multimodal content
+      ];
 
-    const content = completion.choices[0]?.message?.content || "";
-    console.log(`[Image Analysis] GPT-4 Vision response length: ${content.length}`);
+      const response = await generateModel.invoke(messages);
+      const content = typeof response.content === "string" ? response.content : "";
 
-    // Extract JSON from the response (handle markdown code blocks)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      console.error("[Image Analysis] Failed to parse JSON from response:", content);
-      res.status(500).json({ error: "Failed to parse AI response" });
-      return;
+      // Extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        res.status(500).json({ error: "Failed to parse AI response" });
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log("[Image Analysis] Generated slides:", JSON.stringify(parsed, null, 2));
+      res.json(parsed);
+    } else {
+      // Image only: analyze and generate questions
+      console.log("[Image Analysis] Analyzing image only");
+      
+      const systemPrompt = `You are a presentation expert. Analyze the provided image and:
+1. Provide a brief analysis of what you see in the image (2-3 sentences)
+2. Generate 3-5 specific questions that would help create a meaningful presentation about this image
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "analysis": "Brief description of what's in the image...",
+  "questions": ["Question 1?", "Question 2?", "Question 3?"]
+}
+
+Do not include any text outside the JSON.`;
+
+      const messages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage({
+          content: [
+            { type: "text", text: "Analyze this image and suggest questions for creating a presentation." },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        } as any), // Type assertion needed for multimodal content
+      ];
+
+      const response = await generateModel.invoke(messages);
+      const content = typeof response.content === "string" ? response.content : "";
+
+      // Extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        res.status(500).json({ error: "Failed to parse AI response" });
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log("[Image Analysis] Analysis result:", JSON.stringify(parsed, null, 2));
+      res.json(parsed);
     }
-
-    const result = JSON.parse(jsonMatch[0]);
-
-    // If embedMode, add image data to slides
-    if (embedMode && result.slides) {
-      const image_id = req.body.image_id;
-      const hasValidImageId = image_id && typeof image_id === 'string' && image_id.startsWith('img_');
-
-      result.slides = result.slides.map((slide: any, index: number) => {
-        // If GPT-4 didn't provide imageLayout, calculate a default one
-        if (!slide.imageLayout) {
-          console.log(`[Image Analysis] Slide ${index + 1} missing imageLayout, applying default`);
-          slide.imageLayout = calculateDefaultImageLayout(index);
-        }
-
-        // If we have a valid uploaded image_id, use new architecture
-        if (hasValidImageId) {
-          console.log(`[Image Analysis] Using Supabase image ID: ${image_id}`);
-          return {
-            ...slide,
-            images: [{
-              image_id: image_id,
-              role: "primary",
-              alt_text: slide.title || "Presentation image"
-            }],
-            imageLayout: slide.imageLayout
-          };
-        } else {
-          // Fall back to legacy format (full base64 in each slide)
-          console.log(`[Image Analysis] No valid image_id, using legacy base64 format`);
-          return {
-            ...slide,
-            image: {
-              fileName: "uploaded-image",
-              base64: image.base64,
-              mimeType: image.mimeType,
-            },
-            imageLayout: slide.imageLayout
-          };
-        }
-      });
-    }
-
-    // Store in RAG for context (if conversationId provided)
-    if (conversationId) {
-      const analysisContext = `Image analysis: ${content.substring(0, 500)}`;
-      console.log(`[Image Analysis] Storing in RAG for conversation ${conversationId}`);
-      await indexMessage(conversationId, "assistant", analysisContext);
-    }
-
-    console.log(`[Image Analysis] Successfully generated ${result.slides?.length || 0} slides`);
-    res.json(result);
   } catch (error: unknown) {
     console.error("[Image Analysis] Error:", error);
-
-    if (error instanceof Error) {
-      console.error("[Image Analysis] Error message:", error.message);
-    }
-
     const message = error instanceof Error ? error.message : "Image analysis failed";
-    res.status(500).json({ error: `Failed to analyze image: ${message}` });
+    res.status(500).json({ error: message });
   }
 });
 
@@ -538,11 +569,11 @@ You will receive the current slide content (shapes with their roles and text) an
 Respond ONLY with valid JSON containing edit instructions. Available operations:
 
 - "change_title": Change the title text. Requires "newText".
-- "replace_content": Replace the entire content/body text. Requires "newText" with bullet points formatted as "• Point 1\\n• Point 2".
+- "replace_content": Replace the entire content/body text. Requires "newText". Format depends on the slide's current layout: bullet slides use "• Point 1\\n• Point 2", numbered slides use "1. Step one\\n2. Step two", paragraph slides use plain prose separated by \\n\\n, headline slides use a single statement.
 - "add_bullets": Add new bullet points. Requires "bulletsToAdd" (array of strings, WITHOUT the bullet character).
 - "remove_bullets": Remove bullet points matching text. Requires "bulletsToRemove" (array of partial text matches to identify which bullets to remove).
 - "restyle": Change visual styling. Requires "target" ("title", "content", or "all") and "style" object with optional: fontSize (number), fontColor (hex string like "#FF0000"), bold (boolean), italic (boolean), backgroundColor (hex string).
-- "rewrite": AI-rewrite of content while keeping the same meaning. Requires "target" ("title" or "content") and "newText". For content, format as "• Point 1\\n• Point 2".
+- "rewrite": AI-rewrite of content while keeping the same meaning. Requires "target" ("title" or "content") and "newText". Preserve the original format style (bullets use "• ", numbered use "1. ", paragraphs use prose, headlines use a single statement).
 - "delete_slide": Delete the entire slide. No additional fields needed.
 
 Respond ONLY with valid JSON in this format:

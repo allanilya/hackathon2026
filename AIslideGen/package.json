@@ -33,6 +33,9 @@
     "@langchain/openai": "^0.4.9",
     "@langchain/tavily": "^0.1.5",
     "@supabase/supabase-js": "^2.95.3",
+    "@types/papaparse": "^5.5.2",
+    "chart.js": "^4.5.1",
+    "chartjs-node-canvas": "^5.0.0",
     "core-js": "^3.36.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
@@ -40,9 +43,12 @@
     "express": "^4.21.0",
     "langchain": "^0.3.37",
     "mammoth": "^1.11.0",
+    "papaparse": "^5.5.3",
+    "pptxgenjs": "^4.0.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "regenerator-runtime": "^0.14.1"
+    "regenerator-runtime": "^0.14.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",
