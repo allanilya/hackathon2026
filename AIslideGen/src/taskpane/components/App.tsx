@@ -101,8 +101,8 @@ type Action =
   | { type: "SET_TONE"; tone: Tone }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
   | { type: "SET_IMAGE"; image: ImageData | undefined }
-  | { type: "RESET" }
-  | { type: "CLEAR_SEARCH_RESULTS" };
+  | { type: "CLEAR_SEARCH_RESULTS" }
+  | { type: "RESET" };
 
 const initialState: ConversationState = {
   step: "initial",
@@ -133,6 +133,9 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, additionalContext: action.text };
     case "SET_IMAGE":
       return { ...state, image: action.image };
+    case "CLEAR_SEARCH_RESULTS":
+      // Clear search results from messages if needed
+      return state;
     case "RESET":
       return { ...initialState, messages: [] };
     case "CLEAR_SEARCH_RESULTS":
@@ -485,6 +488,22 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     },
     [user, activeConversationId]
   );
+
+  // Stub function for editing slides - to be implemented
+  const runEditSlide = useCallback(async (_text: string) => {
+    const errorMsg = makeAssistantMessage("Slide editing feature is not yet implemented. Please use the slide generation feature instead.");
+    dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+    persistMessage(errorMsg);
+    dispatch({ type: "SET_STEP", step: "initial" });
+  }, [persistMessage]);
+
+  // Stub function for fetching articles - to be implemented
+  const runArticleFetch = useCallback(async (_text: string, _url: string) => {
+    const errorMsg = makeAssistantMessage("Article fetching feature is not yet implemented. Please paste the article content directly.");
+    dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+    persistMessage(errorMsg);
+    dispatch({ type: "SET_STEP", step: "initial" });
+  }, [persistMessage]);
 
   const advanceConversation = useCallback(
     async (currentStep: ConversationStep) => {
@@ -1516,7 +1535,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             // Treat as a new request - reset to initial and re-process
             dispatch({ type: "SET_STEP", step: "initial" });
             await handleSend(text);
-
           }
           break;
         }
@@ -1525,7 +1543,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runArticleFetch, runEditSlide, persistMessage, allowAllSearches, pendingSearchQuery]
+    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
   );
 
   const handleOptionSelect = useCallback(
