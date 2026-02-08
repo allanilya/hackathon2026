@@ -932,34 +932,30 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           }
 
           // Normal flow (no web search needed)
-          // Reset state but preserve messages for context
+          // Clear UI state but preserve messages for context
           setSelectedValues({});
           setSlides([]);
           setInsertedSlideIndexes(new Set());
 
-          dispatch({ type: "SET_STEP", step: "initial" });
+          // Set new prompt and inherit previous settings for follow-up queries
           dispatch({ type: "SET_USER_PROMPT", prompt: intent.topic || text });
+          dispatch({
+            type: "SET_MODE",
+            mode: intent.mode || state.mode, // Inherit previous mode if not specified
+          });
+          dispatch({
+            type: "SET_SLIDE_COUNT",
+            count: intent.slideCount !== undefined ? intent.slideCount : state.slideCount, // Inherit previous count
+          });
+          dispatch({
+            type: "SET_TONE",
+            tone: intent.tone || state.tone, // Inherit previous tone if not specified
+          });
 
-          if (intent.slideCount !== undefined) {
-            dispatch({ type: "SET_SLIDE_COUNT", count: intent.slideCount });
-          }
-          if (intent.mode) {
-            dispatch({ type: "SET_MODE", mode: intent.mode });
-          }
-          if (intent.tone) {
-            dispatch({ type: "SET_TONE", tone: intent.tone });
-          }
-
-          // If we have all info, generate immediately
-          if (intent.hasAllInfo && intent.slideCount !== undefined && intent.mode && intent.tone) {
-            dispatch({ type: "SET_STEP", step: "generating" });
-            await delay(300);
-            await generateSlides();
-          } else {
-            // Otherwise ask for missing info
-            dispatch({ type: "SET_STEP", step: "mode" });
-            await advanceConversation("initial");
-          }
+          // Generate immediately with inherited settings and conversation context
+          dispatch({ type: "SET_STEP", step: "generating" });
+          await delay(300);
+          await generateSlides();
           break;
         }
 
