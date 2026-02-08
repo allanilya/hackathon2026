@@ -10,6 +10,7 @@ import { ArrowReset24Regular } from "@fluentui/react-icons";
 import { createSlide, SlideTheme } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
+import { getDocumentId } from "../services/documentService";
 import { questions } from "../questions";
 import { parseUserIntent } from "../utils/intentParser";
 import { useAuth } from "../contexts/AuthContext";
@@ -186,6 +187,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   // Multi-conversation state
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string>("");
+  const [documentId, setDocumentId] = useState<string>("");
 
   // Ref to track whether we should persist (skip during initial load)
   const isRestoringRef = useRef(false);
@@ -206,7 +208,11 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     async function load() {
       setLoadingConversations(true);
       try {
-        const convs = await fetchConversations(user.id);
+        // Get the document ID first
+        const docId = await getDocumentId();
+        setDocumentId(docId);
+
+        const convs = await fetchConversations(user.id, docId);
 
         if (cancelled) return;
 
@@ -221,7 +227,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             selectedValues: {},
             createdAt: Date.now(),
           };
-          await createConversation(user.id, newConv);
+          await createConversation(user.id, newConv, docId);
           setConversations([newConv]);
           setActiveConversationId(id);
           dispatch({ type: "RESET" });
@@ -379,9 +385,10 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       createdAt: Date.now(),
     };
 
-    // Save to Supabase
+    // Save to Supabase with document ID
     if (user) {
-      createConversation(user.id, newConv).catch((err) =>
+      const docId = await getDocumentId();
+      createConversation(user.id, newConv, docId).catch((err) =>
         console.error("Failed to create conversation:", err)
       );
     }
