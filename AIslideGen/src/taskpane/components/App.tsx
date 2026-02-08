@@ -101,8 +101,8 @@ type Action =
   | { type: "SET_TONE"; tone: Tone }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
   | { type: "SET_IMAGE"; image: ImageData | undefined }
-  | { type: "RESET" }
-  | { type: "CLEAR_SEARCH_RESULTS" };
+  | { type: "CLEAR_SEARCH_RESULTS" }
+  | { type: "RESET" };
 
 const initialState: ConversationState = {
   step: "initial",
@@ -133,6 +133,9 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, additionalContext: action.text };
     case "SET_IMAGE":
       return { ...state, image: action.image };
+    case "CLEAR_SEARCH_RESULTS":
+      // Clear search results from messages if needed
+      return state;
     case "RESET":
       return { ...initialState, messages: [] };
     case "CLEAR_SEARCH_RESULTS":
@@ -1516,7 +1519,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             // Treat as a new request - reset to initial and re-process
             dispatch({ type: "SET_STEP", step: "initial" });
             await handleSend(text);
-
           }
           break;
         }
@@ -1525,7 +1527,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runArticleFetch, runEditSlide, persistMessage, allowAllSearches, pendingSearchQuery]
+    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, runEditSlide, runArticleFetch, persistMessage, allowAllSearches, pendingSearchQuery, isWebSearchMode]
   );
 
   const handleOptionSelect = useCallback(

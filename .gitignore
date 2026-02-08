@@ -1,6 +1,10 @@
 .history/
 .env
 node_modules/
+.next/
+dist/
+*.log
+.DS_Store
 
 # Next.js build artifacts
 extension/.next/
