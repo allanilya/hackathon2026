@@ -7,7 +7,7 @@ import ConversationSelector from "./ConversationSelector";
 import AuthScreen from "./AuthScreen";
 import { Button, makeStyles, tokens, Spinner } from "@fluentui/react-components";
 import { SignOut20Regular } from "@fluentui/react-icons";
-import { createSlide, applyEdits, SlideTheme } from "../taskpane";
+import { createSlide, applyEdits, SlideTheme, SlideLayout } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent, getSlideShapeDetails, goToSlide } from "../services/slideService";
 import { getDocumentId } from "../services/documentService";
@@ -99,6 +99,7 @@ type Action =
   | { type: "SET_MODE"; mode: Mode }
   | { type: "SET_SLIDE_COUNT"; count: number }
   | { type: "SET_TONE"; tone: Tone }
+  | { type: "SET_LAYOUT"; layout: string }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
   | { type: "SET_IMAGE"; image: ImageData | undefined }
   | { type: "CLEAR_SEARCH_RESULTS" }
@@ -110,6 +111,7 @@ const initialState: ConversationState = {
   mode: "generate",
   slideCount: 3,
   tone: "professional",
+  layout: "title-content",
   additionalContext: "",
   messages: [],
   image: undefined,
@@ -129,6 +131,8 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, slideCount: action.count };
     case "SET_TONE":
       return { ...state, tone: action.tone };
+    case "SET_LAYOUT":
+      return { ...state, layout: action.layout };
     case "SET_ADDITIONAL_CONTEXT":
       return { ...state, additionalContext: action.text };
     case "SET_IMAGE":
@@ -1733,6 +1737,10 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     dispatch({ type: "SET_TONE", tone: theme as Tone });
   }, []);
 
+  const handleLayoutChange = useCallback((layout: SlideLayout) => {
+    dispatch({ type: "SET_LAYOUT", layout: layout as string });
+  }, []);
+
   const handleEditSlide = useCallback(async () => {
     const msg = makeAssistantMessage(
       "What would you like to change on the current slide? You can:\n\u2022 Change the title\n\u2022 Add, remove, or rewrite bullet points\n\u2022 Restyle the text (font size, color, bold/italic)\n\u2022 Delete the slide\n\nJust describe what you want in natural language!"
@@ -1743,12 +1751,28 @@ const App: React.FC<AppProps> = (props: AppProps) => {
   }, [persistMessage]);
 
   const handleInsertSlide = async (slide: GeneratedSlide) => {
-    await createSlide({ title: slide.title, bullets: slide.bullets, sources: slide.sources, theme: state.tone as SlideTheme, format: slide.format });
+
+    await createSlide({
+      title: slide.title,
+      bullets: slide.bullets,
+      sources: slide.sources,
+      theme: state.tone as SlideTheme,
+      layout: state.layout as SlideLayout,
+      format: slide.format
+    });
   };
 
   const handleInsertAll = async () => {
     for (const slide of slides) {
-      await createSlide({ title: slide.title, bullets: slide.bullets, sources: slide.sources, theme: state.tone as SlideTheme, format: slide.format });
+
+      await createSlide({
+        title: slide.title,
+        bullets: slide.bullets,
+        sources: slide.sources,
+        theme: state.tone as SlideTheme,
+        layout: state.layout as SlideLayout,
+        format: slide.format
+      });
     }
   };
 
@@ -1816,6 +1840,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onDismissWebSearch={handleDismissWebSearch}
         selectedTheme={state.tone as SlideTheme}
         onThemeChange={handleThemeChange}
+        selectedLayout={state.layout as SlideLayout}
+        onLayoutChange={handleLayoutChange}
         onEditSlide={handleEditSlide}
       />
     </div>

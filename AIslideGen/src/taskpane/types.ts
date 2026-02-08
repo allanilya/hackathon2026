@@ -66,6 +66,7 @@ export interface ConversationState {
   mode: Mode;
   slideCount: number;
   tone: Tone;
+  layout: string; // SlideLayout type from taskpane.ts
   additionalContext: string;
   messages: ChatMessage[];
   image?: ImageData;

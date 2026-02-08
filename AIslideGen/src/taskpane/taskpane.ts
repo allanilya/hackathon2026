@@ -4,12 +4,22 @@ import type { EditInstruction, SlideFormat } from "./types";
 
 export type SlideTheme = "professional" | "casual" | "academic" | "creative" | "minimal";
 
+export type SlideLayout =
+  | "title-content"      // Default: Title + bullet points
+  | "title-only"         // Just a title, large centered
+  | "two-column"         // Title + two columns of content
+  | "big-number"         // Large number/stat + description
+  | "quote"              // Large centered quote
+  | "image-left"         // Image on left, content on right
+  | "image-right";       // Image on right, content on left
+
 export interface SlideData {
   title: string;
   bullets: string[];
   sources?: string[];
   theme?: SlideTheme;
   format?: SlideFormat;
+  layout?: SlideLayout;
 }
 
 interface ThemeStyle {
@@ -114,8 +124,9 @@ export async function createSlide(slideData: SlideData) {
       }
       await context.sync();
 
-      // Get theme style
+      // Get theme style and layout
       const theme = slideData.theme || "professional";
+      const layout = slideData.layout || "title-content";
       const style = themeStyles[theme];
 
       // Note: Shapes are layered in creation order (first created = bottom layer)
@@ -125,7 +136,7 @@ export async function createSlide(slideData: SlideData) {
         const bgRect = newSlide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
         bgRect.left = 0;
         bgRect.top = 0;
-        bgRect.width = 1000;
+        bgRect.width = 720;
         bgRect.height = 540;
         bgRect.fill.setSolidColor(style.backgroundColor);
         bgRect.lineFormat.visible = false;
@@ -142,63 +153,195 @@ export async function createSlide(slideData: SlideData) {
         accentBar.lineFormat.visible = false;
       }
 
-      // Add title text box (created last so it appears on top)
-      const titleBox = newSlide.shapes.addTextBox(slideData.title);
-      titleBox.left = theme === "minimal" ? 50 : 70;
-      titleBox.top = theme === "creative" ? 40 : 50;
-      titleBox.width = 640;
-      titleBox.height = 80;
-      titleBox.textFrame.textRange.font.size = style.titleSize;
-      titleBox.textFrame.textRange.font.bold = style.titleBold;
-      titleBox.textFrame.textRange.font.color = style.titleColor;
-      titleBox.fill.clear();
-      titleBox.lineFormat.visible = false;
+// Render content based on layout
+      switch (layout) {
+        case "title-only":
+          // Large centered title only
+          const titleOnlyBox = newSlide.shapes.addTextBox(slideData.title);
+          titleOnlyBox.left = 60;
+          titleOnlyBox.top = 200;
+          titleOnlyBox.width = 600;
+          titleOnlyBox.height = 140;
+          titleOnlyBox.textFrame.textRange.font.size = style.titleSize + 16;
+          titleOnlyBox.textFrame.textRange.font.bold = true;
+          titleOnlyBox.textFrame.textRange.font.color = style.titleColor;
+          titleOnlyBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          titleOnlyBox.fill.clear();
+          titleOnlyBox.lineFormat.visible = false;
+          break;
 
-      // Build content text based on slide format
-      const format = slideData.format || "bullets";
-      let contentText: string;
-      let contentFontSize: number = style.contentSize;
+        case "two-column":
+          // Title at top
+          const twoColTitle = newSlide.shapes.addTextBox(slideData.title);
+          twoColTitle.left = theme === "minimal" ? 50 : 70;
+          twoColTitle.top = theme === "creative" ? 40 : 50;
+          twoColTitle.width = 640;
+          twoColTitle.height = 60;
+          twoColTitle.textFrame.textRange.font.size = style.titleSize;
+          twoColTitle.textFrame.textRange.font.bold = style.titleBold;
+          twoColTitle.textFrame.textRange.font.color = style.titleColor;
+          twoColTitle.fill.clear();
+          twoColTitle.lineFormat.visible = false;
 
-      switch (format) {
-        case "numbered":
-          contentText = slideData.bullets.map((item, i) => `${i + 1}. ${item}`).join("\n");
+          // Split bullets into two columns
+          const midpoint = Math.ceil(slideData.bullets.length / 2);
+          const leftBullets = slideData.bullets.slice(0, midpoint);
+          const rightBullets = slideData.bullets.slice(midpoint);
+
+          // Left column
+          const leftCol = newSlide.shapes.addTextBox(leftBullets.map(b => `• ${b}`).join("\n"));
+          leftCol.left = theme === "minimal" ? 50 : 70;
+          leftCol.top = 130;
+          leftCol.width = 300;
+          leftCol.height = slideData.sources ? 280 : 330;
+          leftCol.textFrame.textRange.font.size = style.contentSize;
+          leftCol.textFrame.textRange.font.color = style.contentColor;
+          leftCol.fill.clear();
+          leftCol.lineFormat.visible = false;
+
+          // Right column
+          const rightCol = newSlide.shapes.addTextBox(rightBullets.map(b => `• ${b}`).join("\n"));
+          rightCol.left = 390;
+          rightCol.top = 130;
+          rightCol.width = 300;
+          rightCol.height = slideData.sources ? 280 : 330;
+          rightCol.textFrame.textRange.font.size = style.contentSize;
+          rightCol.textFrame.textRange.font.color = style.contentColor;
+          rightCol.fill.clear();
+          rightCol.lineFormat.visible = false;
           break;
-        case "paragraph":
-          contentText = slideData.bullets.join("\n\n");
+
+        case "big-number":
+          // Large number/stat on left, description on right
+          const bigNum = slideData.bullets[0] || "100%";
+          const description = slideData.bullets.slice(1).join("\n");
+
+          const numberBox = newSlide.shapes.addTextBox(bigNum);
+          numberBox.left = 70;
+          numberBox.top = 150;
+          numberBox.width = 280;
+          numberBox.height = 200;
+          numberBox.textFrame.textRange.font.size = 72;
+          numberBox.textFrame.textRange.font.bold = true;
+          numberBox.textFrame.textRange.font.color = style.accentColor;
+          numberBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          numberBox.fill.clear();
+          numberBox.lineFormat.visible = false;
+
+          const descBox = newSlide.shapes.addTextBox(description);
+          descBox.left = 370;
+          descBox.top = 150;
+          descBox.width = 320;
+          descBox.height = 200;
+          descBox.textFrame.textRange.font.size = style.contentSize + 2;
+          descBox.textFrame.textRange.font.color = style.contentColor;
+          descBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          descBox.fill.clear();
+          descBox.lineFormat.visible = false;
+
+          // Title at top
+          const bigNumTitle = newSlide.shapes.addTextBox(slideData.title);
+          bigNumTitle.left = 70;
+          bigNumTitle.top = 50;
+          bigNumTitle.width = 640;
+          bigNumTitle.height = 60;
+          bigNumTitle.textFrame.textRange.font.size = style.titleSize;
+          bigNumTitle.textFrame.textRange.font.bold = style.titleBold;
+          bigNumTitle.textFrame.textRange.font.color = style.titleColor;
+          bigNumTitle.fill.clear();
+          bigNumTitle.lineFormat.visible = false;
           break;
-        case "headline":
-          contentText = slideData.bullets[0] || "";
-          contentFontSize = Math.min(style.contentSize + 8, 28);
+
+        case "quote":
+          // Large centered quote
+          const quoteText = slideData.bullets[0] || slideData.title;
+          const quoteBox = newSlide.shapes.addTextBox(`"${quoteText}"`);
+          quoteBox.left = 100;
+          quoteBox.top = 180;
+          quoteBox.width = 520;
+          quoteBox.height = 180;
+          quoteBox.textFrame.textRange.font.size = style.titleSize + 4;
+          quoteBox.textFrame.textRange.font.italic = true;
+          quoteBox.textFrame.textRange.font.color = style.titleColor;
+          quoteBox.textFrame.verticalAlignment = PowerPoint.TextVerticalAlignment.middle;
+          quoteBox.fill.clear();
+          quoteBox.lineFormat.visible = false;
+
+          // Author/source if provided
+          if (slideData.bullets.length > 1) {
+            const authorBox = newSlide.shapes.addTextBox(`— ${slideData.bullets[1]}`);
+            authorBox.left = 100;
+            authorBox.top = 380;
+            authorBox.width = 520;
+            authorBox.height = 40;
+            authorBox.textFrame.textRange.font.size = style.contentSize;
+            authorBox.textFrame.textRange.font.color = style.contentColor;
+            authorBox.fill.clear();
+            authorBox.lineFormat.visible = false;
+          }
           break;
-        case "bullets":
+
+        case "title-content":
         default:
-          contentText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
+          // Add title text box (created last so it appears on top)
+          const titleBox = newSlide.shapes.addTextBox(slideData.title);
+          titleBox.left = theme === "minimal" ? 50 : 70;
+          titleBox.top = theme === "creative" ? 40 : 50;
+          titleBox.width = 640;
+          titleBox.height = 80;
+          titleBox.textFrame.textRange.font.size = style.titleSize;
+          titleBox.textFrame.textRange.font.bold = style.titleBold;
+          titleBox.textFrame.textRange.font.color = style.titleColor;
+          titleBox.fill.clear();
+          titleBox.lineFormat.visible = false;
+
+          // Build content text based on slide format
+          const format = slideData.format || "bullets";
+          let contentText: string;
+          let contentFontSize: number = style.contentSize;
+
+          switch (format) {
+            case "numbered":
+              contentText = slideData.bullets.map((item, i) => `${i + 1}. ${item}`).join("\n");
+              break;
+            case "paragraph":
+              contentText = slideData.bullets.join("\n\n");
+              break;
+            case "headline":
+              contentText = slideData.bullets[0] || "";
+              contentFontSize = Math.min(style.contentSize + 8, 28);
+              break;
+            case "bullets":
+            default:
+              contentText = slideData.bullets.map(bullet => `• ${bullet}`).join("\n");
+              break;
+          }
+
+          const contentBox = newSlide.shapes.addTextBox(contentText);
+
+          // Position and size the content box based on theme and format
+          if (format === "headline") {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = 200;
+            contentBox.width = 640;
+            contentBox.height = 200;
+          } else {
+            contentBox.left = theme === "minimal" ? 50 : 70;
+            contentBox.top = theme === "creative" ? 140 : 150;
+            contentBox.width = 640;
+            contentBox.height = slideData.sources ? 300 : 350;
+          }
+
+          // Style the content box
+          contentBox.textFrame.textRange.font.size = contentFontSize;
+          contentBox.textFrame.textRange.font.color = format === "headline" ? style.titleColor : style.contentColor;
+          if (format === "headline") {
+            contentBox.textFrame.textRange.font.bold = true;
+          }
+          contentBox.fill.clear();
+          contentBox.lineFormat.visible = false;
           break;
       }
-
-      const contentBox = newSlide.shapes.addTextBox(contentText);
-
-      // Position and size the content box based on theme and format
-      if (format === "headline") {
-        contentBox.left = theme === "minimal" ? 50 : 70;
-        contentBox.top = 200;
-        contentBox.width = 640;
-        contentBox.height = 200;
-      } else {
-        contentBox.left = theme === "minimal" ? 50 : 70;
-        contentBox.top = theme === "creative" ? 140 : 150;
-        contentBox.width = 640;
-        contentBox.height = slideData.sources ? 300 : 350;
-      }
-
-      // Style the content box
-      contentBox.textFrame.textRange.font.size = contentFontSize;
-      contentBox.textFrame.textRange.font.color = format === "headline" ? style.titleColor : style.contentColor;
-      if (format === "headline") {
-        contentBox.textFrame.textRange.font.bold = true;
-      }
-      contentBox.fill.clear();
-      contentBox.lineFormat.visible = false;
 
       // Add sources citation box if sources exist
       if (slideData.sources && slideData.sources.length > 0) {
