@@ -99,7 +99,6 @@ type Action =
   | { type: "SET_MODE"; mode: Mode }
   | { type: "SET_SLIDE_COUNT"; count: number }
   | { type: "SET_TONE"; tone: Tone }
-  | { type: "SET_LAYOUT"; layout: string }
   | { type: "SET_ADDITIONAL_CONTEXT"; text: string }
   | { type: "SET_IMAGE"; image: ImageData | undefined }
   | { type: "CLEAR_SEARCH_RESULTS" }
@@ -111,7 +110,7 @@ const initialState: ConversationState = {
   mode: "generate",
   slideCount: 3,
   tone: "professional",
-  layout: "title-content",
+  layout: "title-content", // Kept for backward-compat with saved conversations; layout is now AI-chosen per slide
   additionalContext: "",
   messages: [],
   image: undefined,
@@ -131,8 +130,6 @@ function chatReducer(state: ConversationState, action: Action): ConversationStat
       return { ...state, slideCount: action.count };
     case "SET_TONE":
       return { ...state, tone: action.tone };
-    case "SET_LAYOUT":
-      return { ...state, layout: action.layout };
     case "SET_ADDITIONAL_CONTEXT":
       return { ...state, additionalContext: action.text };
     case "SET_IMAGE":
@@ -1737,9 +1734,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     dispatch({ type: "SET_TONE", tone: theme as Tone });
   }, []);
 
-  const handleLayoutChange = useCallback((layout: SlideLayout) => {
-    dispatch({ type: "SET_LAYOUT", layout: layout as string });
-  }, []);
 
   const handleEditSlide = useCallback(async () => {
     const msg = makeAssistantMessage(
@@ -1757,7 +1751,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       bullets: slide.bullets,
       sources: slide.sources,
       theme: state.tone as SlideTheme,
-      layout: state.layout as SlideLayout,
+      layout: (slide.layout || "title-content") as SlideLayout,
       format: slide.format
     });
   };
@@ -1770,7 +1764,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         bullets: slide.bullets,
         sources: slide.sources,
         theme: state.tone as SlideTheme,
-        layout: state.layout as SlideLayout,
+        layout: (slide.layout || "title-content") as SlideLayout,
         format: slide.format
       });
     }
@@ -1840,8 +1834,6 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         onDismissWebSearch={handleDismissWebSearch}
         selectedTheme={state.tone as SlideTheme}
         onThemeChange={handleThemeChange}
-        selectedLayout={state.layout as SlideLayout}
-        onLayoutChange={handleLayoutChange}
         onEditSlide={handleEditSlide}
       />
     </div>

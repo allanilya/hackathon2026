@@ -2,12 +2,14 @@ export type Mode = "generate" | "summarize" | "compare" | "proscons" | "research
 export type Tone = "professional" | "casual" | "academic";
 
 export type SlideFormat = "bullets" | "numbered" | "paragraph" | "headline";
+export type SlideLayoutType = "title-content" | "title-only" | "two-column" | "big-number" | "quote";
 
 export interface GeneratedSlide {
   title: string;
   bullets: string[];
   sources?: string[];
   format?: SlideFormat;
+  layout?: SlideLayoutType;
 }
 
 export type ChatMessageRole = "assistant" | "user";

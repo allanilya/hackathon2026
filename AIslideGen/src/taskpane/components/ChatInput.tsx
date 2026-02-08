@@ -17,7 +17,6 @@ import {
   Add24Regular,
   Image24Regular,
   DocumentBulletList24Regular,
-  SlideLayout24Regular,
   ArrowUpload24Regular,
   TextBulletListSquare24Regular,
   Globe24Regular,
@@ -27,7 +26,7 @@ import {
 } from "@fluentui/react-icons";
 import { parseFile } from "../utils/fileParser";
 import { processImage, ImageData } from "../utils/imageHandler";
-import type { SlideTheme, SlideLayout } from "../taskpane";
+import type { SlideTheme } from "../taskpane";
 
 const themeLabels: Record<SlideTheme, string> = {
   professional: "Professional",
@@ -35,16 +34,6 @@ const themeLabels: Record<SlideTheme, string> = {
   academic: "Academic",
   creative: "Creative",
   minimal: "Minimal",
-};
-
-const layoutLabels: Record<SlideLayout, string> = {
-  "title-content": "Title + Content",
-  "title-only": "Title Only",
-  "two-column": "Two Column",
-  "big-number": "Big Number",
-  "quote": "Quote",
-  "image-left": "Image Left",
-  "image-right": "Image Right",
 };
 
 interface ChatInputProps {
@@ -61,8 +50,6 @@ interface ChatInputProps {
   onDismissWebSearch?: () => void;
   selectedTheme?: SlideTheme;
   onThemeChange?: (theme: SlideTheme) => void;
-  selectedLayout?: SlideLayout;
-  onLayoutChange?: (layout: SlideLayout) => void;
   onEditSlide?: () => void;
 }
 
@@ -155,8 +142,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onDismissWebSearch,
   selectedTheme = "professional",
   onThemeChange,
-  selectedLayout = "title-content",
-  onLayoutChange,
   onEditSlide,
 }) => {
   const styles = useStyles();
@@ -233,21 +218,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
   return (
     <div className={styles.container}>
       {/* Active Indicators Row */}
-      {(selectedTheme || selectedLayout || isWebSearchActive) && (
+      {(selectedTheme || isWebSearchActive) && (
         <div className={styles.activeIndicatorRow}>
           {/* Theme Indicator */}
           {selectedTheme && (
             <div className={styles.activeIndicatorChip}>
               <PaintBrush24Regular style={{ width: "14px", height: "14px" }} />
               <span>{themeLabels[selectedTheme]}</span>
-            </div>
-          )}
-
-          {/* Layout Indicator */}
-          {selectedLayout && (
-            <div className={styles.activeIndicatorChip}>
-              <SlideLayout24Regular style={{ width: "14px", height: "14px" }} />
-              <span>{layoutLabels[selectedLayout]}</span>
             </div>
           )}
 
@@ -310,28 +287,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
                         onClick={() => onThemeChange?.(theme)}
                       >
                         {themeLabels[theme]}
-                      </MenuItem>
-                    ))}
-                  </MenuList>
-                </MenuPopover>
-              </Menu>
-
-              {/* Layout Submenu */}
-              <Menu>
-                <MenuTrigger disableButtonEnhancement>
-                  <MenuItem icon={<SlideLayout24Regular />}>
-                    Layouts
-                  </MenuItem>
-                </MenuTrigger>
-
-                <MenuPopover>
-                  <MenuList>
-                    {(Object.keys(layoutLabels) as SlideLayout[]).map((layout) => (
-                      <MenuItem
-                        key={layout}
-                        onClick={() => onLayoutChange?.(layout)}
-                      >
-                        {layoutLabels[layout]}
                       </MenuItem>
                     ))}
                   </MenuList>

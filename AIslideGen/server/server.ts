@@ -50,39 +50,65 @@ CONTENT FORMAT - Choose the best "format" for each slide:
 - "headline": Use for title/transition slides, section dividers, or impactful single-statement slides. 1-2 entries: a main statement and optionally a subtitle.
 VARIETY: Vary the format across slides for visual interest. Do NOT use the same format for every slide.`;
 
+const LAYOUT_GUIDELINES = `
+SLIDE LAYOUT - Choose the best "layout" for each slide based on its content:
+- "title-content": Standard layout with title and content below. Best for most slides with bullet points, numbered lists, paragraphs, or general information.
+- "title-only": Large centered title with no body content. Use for opening/closing slides, section dividers, or dramatic single-statement slides. When using this layout, the "bullets" array should be empty [].
+- "two-column": Title with content split into two columns. Use when comparing two things side-by-side, showing pros/cons, or presenting parallel information. Needs 4+ bullet points to split evenly.
+- "big-number": Large prominent number/statistic with supporting description. Use when a slide centers around a key metric, percentage, or statistic. First bullet should be the number/stat (e.g., "95%", "$2.4B", "10x"), remaining bullets are the description.
+- "quote": Large centered quote. Use for notable quotes, testimonials, or impactful statements. First bullet is the quote text, optional second bullet is the attribution/author.
+VARIETY: Vary layouts across slides for visual interest. Do NOT use "title-content" for every slide - pick the layout that best fits each slide's content.`;
+
 const FORMAT_EXAMPLES = `
 FORMAT VALUES: "bullets" | "numbered" | "paragraph" | "headline"
+LAYOUT VALUES: "title-content" | "title-only" | "two-column" | "big-number" | "quote"
 EXAMPLES:
-- Bullets:    { "title": "Key Features", "format": "bullets", "bullets": ["Fast performance", "Easy to use", "Scalable architecture"] }
-- Numbered:   { "title": "Setup Steps", "format": "numbered", "bullets": ["Install the CLI tool", "Configure your environment", "Run the initialization command"] }
-- Paragraph:  { "title": "Executive Summary", "format": "paragraph", "bullets": ["The project achieved a 40% improvement in processing speed. This was driven by the new caching layer and database optimizations.", "Looking ahead, the team plans to focus on horizontal scaling to handle projected traffic increases."] }
-- Headline:   { "title": "The Future of AI", "format": "headline", "bullets": ["Transforming every industry by 2030"] }`;
+- Bullets:    { "title": "Key Features", "layout": "title-content", "format": "bullets", "bullets": ["Fast performance", "Easy to use", "Scalable architecture"] }
+- Numbered:   { "title": "Setup Steps", "layout": "title-content", "format": "numbered", "bullets": ["Install the CLI tool", "Configure your environment", "Run the initialization command"] }
+- Two-Column: { "title": "Pros vs Cons", "layout": "two-column", "format": "bullets", "bullets": ["Pro: Fast performance", "Pro: Easy setup", "Con: Limited plugins", "Con: Steep learning curve"] }
+- Big Number: { "title": "Market Growth", "layout": "big-number", "format": "bullets", "bullets": ["340%", "Year-over-year growth in AI adoption across enterprise companies since 2024"] }
+- Quote:      { "title": "Industry Perspective", "layout": "quote", "format": "bullets", "bullets": ["The best way to predict the future is to invent it.", "Alan Kay"] }
+- Headline:   { "title": "The Future of AI", "layout": "title-only", "format": "headline", "bullets": [] }
+- Paragraph:  { "title": "Executive Summary", "layout": "title-content", "format": "paragraph", "bullets": ["The project achieved a 40% improvement in processing speed. This was driven by the new caching layer and database optimizations.", "Looking ahead, the team plans to focus on horizontal scaling to handle projected traffic increases."] }`;
 
 const systemPrompts: Record<Mode, string> = {
   generate:
     `You are a presentation expert. Create slides with specific, valuable information - not generic statements. Each slide must contain concrete facts, actionable insights, or specific examples. Use clear titles. Avoid meta-commentary or process descriptions.
 
-${FORMAT_GUIDELINES}`,
+${FORMAT_GUIDELINES}
+
+${LAYOUT_GUIDELINES}`,
   summarize:
     `You are a summarization expert. Extract the most important facts, insights, and takeaways from the content. Focus on specific information, key findings, and concrete details. Avoid generic summaries - be specific and informative.
 
 ${FORMAT_GUIDELINES}
-Prefer "paragraph" for narrative summaries, "bullets" for key takeaways, "numbered" for sequential findings.`,
+Prefer "paragraph" for narrative summaries, "bullets" for key takeaways, "numbered" for sequential findings.
+
+${LAYOUT_GUIDELINES}`,
   compare:
     `You are an analysis expert. Create detailed comparisons with specific differences, concrete examples, and quantifiable metrics where possible. Include factual distinctions, real-world implications, and data-driven insights. Avoid vague comparisons.
 
 ${FORMAT_GUIDELINES}
-Use "bullets" for side-by-side comparison points, "numbered" for ranked differences, "paragraph" for nuanced analysis.`,
+Use "bullets" for side-by-side comparison points, "numbered" for ranked differences, "paragraph" for nuanced analysis.
+
+${LAYOUT_GUIDELINES}
+Prefer "two-column" for direct comparisons.`,
   proscons:
     `You are a critical thinking expert. Provide specific, concrete pros and cons with real examples and evidence. Include factual benefits and drawbacks, not generic observations. Support claims with specifics.
 
 ${FORMAT_GUIDELINES}
-Use "bullets" for pros and cons lists. Optionally use "paragraph" for an overall assessment slide.`,
+Use "bullets" for pros and cons lists. Optionally use "paragraph" for an overall assessment slide.
+
+${LAYOUT_GUIDELINES}
+Prefer "two-column" for pros vs cons slides.`,
   research:
     `You are a research expert. Extract ONLY information that appears in the provided research sources - do NOT use general knowledge. Focus on CURRENT, SPECIFIC events: exact dates (e.g., 'On Feb 5, 2026...'), recent developments, specific people/places, breaking news, statistics with numbers, and concrete events from the sources. You may use shorthand citations like 'According to [source name]...' or 'Reuters reports...' in bullet points. Prioritize the most recent and newsworthy information. Avoid generic background - focus on what's happening NOW based on the sources.
 
 ${FORMAT_GUIDELINES}
-Use "numbered" for chronological developments, "bullets" for key findings, "paragraph" for analysis or context.`,
+Use "numbered" for chronological developments, "bullets" for key findings, "paragraph" for analysis or context.
+
+${LAYOUT_GUIDELINES}
+Use "big-number" for key statistics from research. Use "quote" for notable expert statements.`,
 };
 
 app.post("/api/generate", async (req, res) => {
@@ -105,14 +131,14 @@ app.post("/api/generate", async (req, res) => {
 
   console.log("Generate request - Mode:", mode, "Has research sources:", hasResearchSources);
 
-  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+  let jsonFormat = `{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
 
 ${FORMAT_EXAMPLES}`;
   let citationInstructions = "";
 
   if (hasResearchSources && mode === "research") {
     console.log("Including sources in JSON format");
-    jsonFormat = `{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }
+    jsonFormat = `{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }
 
 ${FORMAT_EXAMPLES}
 Each slide may also include a "sources" array with full URLs.`;
@@ -157,12 +183,16 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
 
     const parsed = JSON.parse(jsonMatch[0]);
 
-    // Validate and default format field on each slide
+    // Validate and default format and layout fields on each slide
     const validFormats = ["bullets", "numbered", "paragraph", "headline"];
+    const validLayouts = ["title-content", "title-only", "two-column", "big-number", "quote"];
     if (parsed.slides) {
       for (const s of parsed.slides) {
         if (!s.format || !validFormats.includes(s.format)) {
           s.format = "bullets";
+        }
+        if (!s.layout || !validLayouts.includes(s.layout)) {
+          s.layout = "title-content";
         }
       }
     }
@@ -420,12 +450,14 @@ app.post("/api/analyze-image", async (req, res) => {
     if (text && slideCount) {
       console.log("[Image Analysis] Generating slides from image + text");
       
-      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and choose the optimal content format for each slide. Avoid meta-commentary or process descriptions.
+      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and choose the optimal content format and layout for each slide. Avoid meta-commentary or process descriptions.
 
 ${FORMAT_GUIDELINES}
 
+${LAYOUT_GUIDELINES}
+
 Respond ONLY with valid JSON in this exact format:
-{ "slides": [{ "title": "Slide Title", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+{ "slides": [{ "title": "Slide Title", "layout": "title-content", "format": "bullets", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
 
 ${FORMAT_EXAMPLES}
 
