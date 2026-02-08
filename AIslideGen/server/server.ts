@@ -151,6 +151,8 @@ Each slide may also include a "sources" array with full URLs.`;
 
   const systemPrompt = `${systemPrompts[mode]}${citationInstructions}
 
+CRITICAL: In JSON, the "title" field must NEVER contain format type words (bullets, paragraph, numbered, headline). Keep "title" clean - use the separate "format" field for formatting.
+
 Respond ONLY with valid JSON in this exact format:
 ${jsonFormat}
 

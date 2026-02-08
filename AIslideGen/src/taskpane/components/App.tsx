@@ -890,9 +890,9 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       const slideCount = intent.slideCount !== undefined ? intent.slideCount : (state.slideCount || 3);
       const tone = intent.tone || state.tone || "professional";
       const mode = intent.mode || "summarize"; // Default to summarize for article URLs
-      const topic = intent.topic || `Article from ${url}`;
+      const topic = intent.topic || `Content from ${url}`;
 
-      const fetchMsg = makeAssistantMessage(`Fetching article from ${url}...`);
+      const fetchMsg = makeAssistantMessage(`Fetching content from ${url}...`);
       dispatch({ type: "ADD_MESSAGE", message: fetchMsg });
       await persistMessage(fetchMsg);
 
@@ -916,7 +916,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       }
 
       const contentMsg = makeAssistantMessage(
-        `Got it! Creating ${slideCount} slides summarizing this article...`
+        `Got it! Creating ${slideCount} slides from this link...`
       );
       dispatch({ type: "ADD_MESSAGE", message: contentMsg });
       await persistMessage(contentMsg);
@@ -997,7 +997,10 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     const maxResults = Math.min(Math.max(slideCount + 3, 5), 12);
 
     // Determine if web search is actually needed based on query context
+    // Always search if there's a URL, or if query has temporal/research keywords
+    const hasUrl = extractUrl(query) !== null;
     const needsWebSearch =
+      hasUrl ||
       mode === "research" ||
       /\b(latest|recent|current|today|2024|2025|2026|news|happening|developments|updates|situation|statistics|data|trends)\b/i.test(
         query
@@ -1140,7 +1143,34 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 2. Check if it's an edit request (before slide generation check)
+          // 2. Check if user provided a URL - HIGHEST PRIORITY (before questions)
+          const providedUrl = extractUrl(text);
+          if (providedUrl) {
+            // Parse user intent to check if slide count was specified
+            const intent = parseUserIntent(text);
+            if (intent.slideCount) {
+              // User specified slide count - fetch content from URL immediately
+              await runArticleFetch(text, providedUrl);
+            } else {
+              // User didn't specify slide count - ask for it first
+              dispatch({ type: "SET_USER_PROMPT", prompt: providedUrl });
+              dispatch({ type: "SET_STEP", step: "slideCount" });
+              setIsTyping(true);
+              await delay(400);
+              setIsTyping(false);
+
+              const slideCountMsg = makeAssistantMessage(
+                "How many slides would you like me to create about this link?",
+                questions.slideCount.options,
+                questions.slideCount.allowOther
+              );
+              dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
+              await persistMessage(slideCountMsg);
+            }
+            return;
+          }
+
+          // 3. Check if it's an edit request (before slide generation check)
           if (isEditRequest(text)) {
             const editTarget = parseEditTarget(text);
             if (editTarget.scope === "specific" && editTarget.slideNumber) {
@@ -1160,7 +1190,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 3. Check if it's a summary request
+          // 4. Check if it's a summary request
           const summaryIntent = isSummaryRequest(text);
           if (summaryIntent) {
             if (summaryIntent.scope === "specific_slide" && summaryIntent.slideNumber) {
@@ -1173,35 +1203,46 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             return;
           }
 
-          // 4. Check if it's a question about slides or general knowledge
+          // 5. Check if it's a question about slides or general knowledge
           const questionIntent = isSlideQuestion(text);
           if (questionIntent) {
             await runSlideQuestion(questionIntent.question, questionIntent.scope, questionIntent.slideNumber);
             return;
           }
 
-          // 5. Parse user intent from the message
+          // 6. Parse user intent from the message
           const intent = parseUserIntent(text);
-
-          // 5. Check if user provided a specific URL - if so, fetch that article directly
-          const providedUrl = extractUrl(text);
-          if (providedUrl) {
-            // User provided a URL - fetch it directly without asking permission
-            await runArticleFetch(text, providedUrl);
-            return;
-          }
 
           // Check if web search is needed (toggle ON or current events detected)
           const needsWebSearch = isWebSearchMode || detectsCurrentEvents(text);
           if (needsWebSearch) {
             // Check if user has allowed all searches this session
             if (allowAllSearches) {
-              // Auto-trigger web search with permission
-              const msg = makeAssistantMessage("Searching the web for latest information...");
-              dispatch({ type: "ADD_MESSAGE", message: msg });
-              await persistMessage(msg);
-              await runWebSearch(text);
-              return;
+              // Check if slide count was specified
+              if (intent.slideCount) {
+                // Auto-trigger web search with permission and slide count
+                const msg = makeAssistantMessage("Searching the web for latest information...");
+                dispatch({ type: "ADD_MESSAGE", message: msg });
+                await persistMessage(msg);
+                await runWebSearch(text);
+                return;
+              } else {
+                // Ask for slide count first
+                dispatch({ type: "SET_USER_PROMPT", prompt: text });
+                dispatch({ type: "SET_STEP", step: "slideCount" });
+                setIsTyping(true);
+                await delay(400);
+                setIsTyping(false);
+
+                const slideCountMsg = makeAssistantMessage(
+                  "How many slides would you like?",
+                  questions.slideCount.options,
+                  questions.slideCount.allowOther
+                );
+                dispatch({ type: "ADD_MESSAGE", message: slideCountMsg });
+                await persistMessage(slideCountMsg);
+                return;
+              }
             } else {
               // Ask for permission first, even if toggle is ON
               setPendingSearchQuery(text);
@@ -1336,8 +1377,21 @@ const App: React.FC<AppProps> = (props: AppProps) => {
               setIsTyping(false);
             }
           } else {
-            // Normal flow: advance conversation
-            await advanceConversation(currentStep);
+            // Check if there's a URL in the user prompt (URL fetch flow)
+            const urlInPrompt = extractUrl(state.userPrompt);
+            if (urlInPrompt) {
+              // User specified slide count for URL - now fetch content from it
+              await runArticleFetch(state.userPrompt, urlInPrompt);
+            } else if (detectsCurrentEvents(state.userPrompt) || isWebSearchMode) {
+              // User specified slide count for web search query - now search
+              const searchMsg = makeAssistantMessage("Searching the web for latest information...");
+              dispatch({ type: "ADD_MESSAGE", message: searchMsg });
+              await persistMessage(searchMsg);
+              await runWebSearch(state.userPrompt);
+            } else {
+              // Normal flow: advance conversation
+              await advanceConversation(currentStep);
+            }
           }
           break;
         }
