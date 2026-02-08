@@ -6,7 +6,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 
 /* global document, Office, module, require, HTMLElement */
 
-const title = "Spark";
+const title = "Slider";
 
 const rootElement: HTMLElement | null = document.getElementById("container");
 const root = rootElement ? createRoot(rootElement) : undefined;

@@ -163,5 +163,5 @@ app.post("/api/search", async (req, res) => {
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => {
-  console.log(`Spark API server running on http://localhost:${PORT}`);
+  console.log(`Slider API server running on http://localhost:${PORT}`);
 });

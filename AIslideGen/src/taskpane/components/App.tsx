@@ -6,7 +6,7 @@ import ChatInput from "./ChatInput";
 import ConversationSelector from "./ConversationSelector";
 import AuthScreen from "./AuthScreen";
 import { Button, makeStyles, tokens, Spinner } from "@fluentui/react-components";
-import { ArrowReset24Regular, SignOut20Regular } from "@fluentui/react-icons";
+import { ArrowReset24Regular } from "@fluentui/react-icons";
 import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
@@ -49,12 +49,6 @@ const useStyles = makeStyles({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: tokens.colorNeutralBackground2,
-  },
-  signOutRow: {
-    display: "flex",
-    justifyContent: "flex-end",
-    paddingRight: "12px",
-    paddingTop: "4px",
   },
 });
 
@@ -228,7 +222,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
           // Show greeting
           const greeting = makeAssistantMessage(
-            "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+            "Hi! I'm Slider. Tell me what you'd like to create a presentation about."
           );
           dispatch({ type: "ADD_MESSAGE", message: greeting });
           await saveMessage(id, greeting).catch(() => {});
@@ -261,7 +255,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
             // If the latest conversation has no messages, show greeting
             if (messages.length === 0) {
               const greeting = makeAssistantMessage(
-                "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+                "Hi! I'm Slider. Tell me what you'd like to create a presentation about."
               );
               dispatch({ type: "ADD_MESSAGE", message: greeting });
               saveMessage(latest.id, greeting).catch(() => {});
@@ -290,7 +284,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         dispatch({ type: "RESET" });
 
         const greeting = makeAssistantMessage(
-          "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+          "Hi! I'm Slider. Tell me what you'd like to create a presentation about."
         );
         dispatch({ type: "ADD_MESSAGE", message: greeting });
       } finally {
@@ -391,7 +385,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     setIsWebSearchMode(false);
     setTimeout(() => {
       const greeting = makeAssistantMessage(
-        "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+        "Hi! I'm Slider. Tell me what you'd like to create a presentation about."
       );
       dispatch({ type: "ADD_MESSAGE", message: greeting });
       saveMessage(id, greeting).catch(() => {});
@@ -957,17 +951,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
   return (
     <div className={styles.root}>
-      <Header logo="assets/logo-filled.png" title={props.title} />
-      <div className={styles.signOutRow}>
-        <Button
-          appearance="subtle"
-          icon={<SignOut20Regular />}
-          onClick={signOut}
-          size="small"
-        >
-          Sign Out
-        </Button>
-      </div>
+      <Header logo="assets/logo-filled.png" title={props.title} user={user} onSignOut={signOut} />
       <ConversationSelector
         conversations={conversations}
         activeConversationId={activeConversationId}
