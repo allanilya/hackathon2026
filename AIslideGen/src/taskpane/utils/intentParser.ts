@@ -20,18 +20,13 @@ export interface ParsedIntent {
 function parseSlideCount(text: string): number | undefined {
   const lowerText = text.toLowerCase();
 
-  // Check for "a slide" or "one slide"
-  if (/\ba\s+slide\b/.test(lowerText) || /\bone\s+slide\b/.test(lowerText)) {
-    return 1;
-  }
-
-  // Check for number + "slide(s)"
+  // PRIORITY 1: Check for explicit number + "slide(s)" (e.g., "4 slides total", "3 slides")
   const numberMatch = lowerText.match(/(\d+)\s+slides?/);
   if (numberMatch) {
     return parseInt(numberMatch[1], 10);
   }
 
-  // Check for written numbers
+  // PRIORITY 2: Check for written numbers (e.g., "three slides", "five slides")
   const writtenNumbers: Record<string, number> = {
     two: 2, three: 3, four: 4, five: 5,
     six: 6, seven: 7, eight: 8, nine: 9, ten: 10
@@ -41,6 +36,11 @@ function parseSlideCount(text: string): number | undefined {
     if (new RegExp(`\\b${word}\\s+slides?\\b`).test(lowerText)) {
       return num;
     }
+  }
+
+  // PRIORITY 3: Check for "a slide" or "one slide" (only if no explicit number found)
+  if (/\ba\s+slide\b/.test(lowerText) || /\bone\s+slide\b/.test(lowerText)) {
+    return 1;
   }
 
   return undefined;

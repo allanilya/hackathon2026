@@ -1,0 +1,134 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<OfficeApp xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+           xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+           xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+           xmlns:ov="http://schemas.microsoft.com/office/taskpaneappversionoverrides"
+           xsi:type="TaskPaneApp">
+
+  <!-- IMPORTANT: This is a production template. Replace ALL placeholder values marked with [REPLACE_THIS] -->
+
+  <!-- Unique ID - DO NOT CHANGE after first submission -->
+  <Id>3ab4459f-1049-4627-939c-5d33bdca8667</Id>
+
+  <!-- Version number - Increment for each submission -->
+  <Version>1.0.0.0</Version>
+
+  <!-- Your company/publisher name -->
+  <ProviderName>[REPLACE_THIS: Your Company Name]</ProviderName>
+
+  <!-- Default language -->
+  <DefaultLocale>en-US</DefaultLocale>
+
+  <!-- Display name shown in PowerPoint -->
+  <DisplayName DefaultValue="Slider"/>
+
+  <!-- Short description (under 125 characters) -->
+  <Description DefaultValue="AI-powered slide creation for PowerPoint. Generate professional presentations instantly."/>
+
+  <!-- Icon URLs - MUST be HTTPS production URLs -->
+  <IconUrl DefaultValue="https://[REPLACE_THIS: yourdomain.com]/assets/icons/icon-32.png"/>
+  <HighResolutionIconUrl DefaultValue="https://[REPLACE_THIS: yourdomain.com]/assets/icons/icon-128.png"/>
+
+  <!-- Support URL - where users can get help -->
+  <SupportUrl DefaultValue="https://[REPLACE_THIS: yourdomain.com]/support"/>
+
+  <!-- AppDomains - list all domains your add-in uses -->
+  <AppDomains>
+    <AppDomain>https://[REPLACE_THIS: yourdomain.com]</AppDomain>
+    <!-- Add additional domains if needed, e.g., for authentication -->
+    <!-- <AppDomain>https://auth.yourdomain.com</AppDomain> -->
+  </AppDomains>
+
+  <!-- Supported Office applications -->
+  <Hosts>
+    <Host Name="Presentation"/>
+  </Hosts>
+
+  <!-- Main entry point - MUST be HTTPS production URL -->
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://[REPLACE_THIS: yourdomain.com]/taskpane.html"/>
+  </DefaultSettings>
+
+  <!-- Permissions required -->
+  <Permissions>ReadWriteDocument</Permissions>
+
+  <!-- Version overrides for modern Office experiences -->
+  <VersionOverrides xmlns="http://schemas.microsoft.com/office/taskpaneappversionoverrides" xsi:type="VersionOverridesV1_0">
+    <Hosts>
+      <Host xsi:type="Presentation">
+        <DesktopFormFactor>
+
+          <!-- First-run experience -->
+          <GetStarted>
+            <Title resid="GetStarted.Title"/>
+            <Description resid="GetStarted.Description"/>
+            <LearnMoreUrl resid="GetStarted.LearnMoreUrl"/>
+          </GetStarted>
+
+          <!-- Commands file -->
+          <FunctionFile resid="Commands.Url"/>
+
+          <!-- Ribbon customization -->
+          <ExtensionPoint xsi:type="PrimaryCommandSurface">
+            <OfficeTab id="TabHome">
+              <Group id="CommandsGroup">
+                <Label resid="CommandsGroup.Label"/>
+                <Icon>
+                  <bt:Image size="16" resid="Icon.16x16"/>
+                  <bt:Image size="32" resid="Icon.32x32"/>
+                  <bt:Image size="80" resid="Icon.80x80"/>
+                </Icon>
+
+                <!-- Main button to open task pane -->
+                <Control xsi:type="Button" id="TaskpaneButton">
+                  <Label resid="TaskpaneButton.Label"/>
+                  <Supertip>
+                    <Title resid="TaskpaneButton.Label"/>
+                    <Description resid="TaskpaneButton.Tooltip"/>
+                  </Supertip>
+                  <Icon>
+                    <bt:Image size="16" resid="Icon.16x16"/>
+                    <bt:Image size="32" resid="Icon.32x32"/>
+                    <bt:Image size="80" resid="Icon.80x80"/>
+                  </Icon>
+                  <Action xsi:type="ShowTaskpane">
+                    <TaskpaneId>ButtonId1</TaskpaneId>
+                    <SourceLocation resid="Taskpane.Url"/>
+                  </Action>
+                </Control>
+              </Group>
+            </OfficeTab>
+          </ExtensionPoint>
+        </DesktopFormFactor>
+      </Host>
+    </Hosts>
+
+    <!-- Resources section - string and image references -->
+    <Resources>
+      <bt:Images>
+        <bt:Image id="Icon.16x16" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/assets/icons/icon-16.png"/>
+        <bt:Image id="Icon.32x32" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/assets/icons/icon-32.png"/>
+        <bt:Image id="Icon.80x80" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/assets/icons/icon-80.png"/>
+      </bt:Images>
+
+      <bt:Urls>
+        <bt:Url id="GetStarted.LearnMoreUrl" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/help"/>
+        <bt:Url id="Commands.Url" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/commands.html"/>
+        <bt:Url id="Taskpane.Url" DefaultValue="https://[REPLACE_THIS: yourdomain.com]/taskpane.html"/>
+      </bt:Urls>
+
+      <bt:ShortStrings>
+        <!-- Max 125 characters -->
+        <bt:String id="GetStarted.Title" DefaultValue="Welcome to Slider!"/>
+        <bt:String id="CommandsGroup.Label" DefaultValue="Slider"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Create Slides"/>
+      </bt:ShortStrings>
+
+      <bt:LongStrings>
+        <!-- Max 250 characters -->
+        <bt:String id="GetStarted.Description" DefaultValue="Transform your content into professional PowerPoint slides using AI. Click 'Create Slides' in the Home tab to get started."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open Slider to generate AI-powered slides from your content. Supports text, documents, images, and data."/>
+      </bt:LongStrings>
+    </Resources>
+  </VersionOverrides>
+</OfficeApp>
