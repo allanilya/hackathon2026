@@ -2,7 +2,7 @@
 
 import type { EditInstruction, SlideFormat } from "./types";
 
-export type SlideTheme = "professional" | "casual" | "academic" | "creative" | "minimal";
+export type SlideTheme = "professional" | "casual" | "academic" | "creative" | "minimal" | "slider";
 
 export type SlideLayout =
   | "title-content"      // Default: Title + bullet points
@@ -94,6 +94,15 @@ const themeStyles: Record<SlideTheme, ThemeStyle> = {
     backgroundColor: "#FFFFFF",
     accentColor: "#000000",
   },
+  slider: {
+    titleSize: 38,
+    titleColor: "#D4784A",
+    titleBold: true,
+    contentSize: 18,
+    contentColor: "#D4CFC8",  // #D4CFC8 content color
+    backgroundColor: "#0D0A07",  // #0D0A07 background
+    accentColor: "#D4784A",  // #D4784A accent color
+  },
 };
 
 export async function createSlide(slideData: SlideData) {
@@ -132,18 +141,18 @@ export async function createSlide(slideData: SlideData) {
       // Note: Shapes are layered in creation order (first created = bottom layer)
 
       // Add background rectangle for certain themes
-      if (theme === "casual" || theme === "creative") {
+      if (theme === "casual" || theme === "creative" || theme === "slider") {
         const bgRect = newSlide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
         bgRect.left = 0;
         bgRect.top = 0;
-        bgRect.width = 720;
+        bgRect.width = 1000;
         bgRect.height = 540;
         bgRect.fill.setSolidColor(style.backgroundColor);
         bgRect.lineFormat.visible = false;
       }
 
       // Add accent bar for some themes (created after background, before text)
-      if (theme === "professional" || theme === "creative" || theme === "academic") {
+      if (theme === "professional" || theme === "creative" || theme === "academic" || theme === "slider") {
         const accentBar = newSlide.shapes.addGeometricShape(PowerPoint.GeometricShapeType.rectangle);
         accentBar.left = 0;
         accentBar.top = 0;
@@ -357,7 +366,7 @@ export async function createSlide(slideData: SlideData) {
         // Style as smaller, italicized text
         sourcesBox.textFrame.textRange.font.size = 10;
         sourcesBox.textFrame.textRange.font.italic = true;
-        sourcesBox.textFrame.textRange.font.color = "#666666";
+        sourcesBox.textFrame.textRange.font.color = theme === "slider" ? "#9A9590" : "#666666";
         sourcesBox.fill.clear(); // Transparent background
         sourcesBox.lineFormat.visible = false;
       }

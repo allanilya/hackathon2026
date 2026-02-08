@@ -37,6 +37,7 @@ const themeLabels: Record<SlideTheme, string> = {
   academic: "Academic",
   creative: "Creative",
   minimal: "Minimal",
+  slider: "Slider",
 };
 
 const layoutLabels: Record<SlideLayout, string> = {
