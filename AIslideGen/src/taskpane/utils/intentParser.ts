@@ -136,3 +136,15 @@ export function parseUserIntent(message: string): ParsedIntent {
     hasAllInfo
   };
 }
+
+/**
+ * Detects if the user's query is about current events or recent information
+ * that would benefit from web search.
+ */
+export function detectsCurrentEvents(text: string): boolean {
+  const lowerText = text.toLowerCase();
+  const temporal = /\b(latest|recent|current|today|this week|2024|2025|2026|now|happening|breaking|news|developments)\b/i;
+  const questions = /\b(what's happening|what's going on|what are the latest)\b/i;
+  const data = /\b(current statistics|latest data|recent trends|breaking news)\b/i;
+  return temporal.test(lowerText) || questions.test(lowerText) || data.test(lowerText);
+}

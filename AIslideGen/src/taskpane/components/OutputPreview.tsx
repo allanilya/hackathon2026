@@ -59,13 +59,18 @@ const OutputPreview: React.FC<OutputPreviewProps> = (props: OutputPreviewProps) 
     return null;
   }
 
+  // Check if all slides have been inserted
+  const allInserted = insertedSlideIndexes && insertedSlideIndexes.size === slides.length;
+
   return (
     <div className={styles.wrapper}>
       <div className={styles.headerRow}>
         <Text className={styles.heading}>Generated Slides ({slides.length})</Text>
-        <Button appearance="primary" icon={<ArrowDownload24Regular />} onClick={onInsertAll} size="small">
-          Insert All
-        </Button>
+        {!allInserted && (
+          <Button appearance="primary" icon={<ArrowDownload24Regular />} onClick={onInsertAll} size="small">
+            Insert All
+          </Button>
+        )}
       </div>
       {slides.map((slide, index) => {
         const isInserted = insertedSlideIndexes?.has(index);

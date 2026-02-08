@@ -35,7 +35,7 @@ app.post("/api/generate", async (req, res) => {
     slideCount: number;
     tone: string;
     additionalContext?: string;
-    conversationHistory?: string[];
+    conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
   };
 
   if (!input || !mode) {
@@ -52,8 +52,8 @@ app.post("/api/generate", async (req, res) => {
 
   if (hasResearchSources && mode === "research") {
     console.log("Including sources in JSON format");
-    jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["example.com", "news.site.com"] }] }`;
-    citationInstructions = "\n\nIMPORTANT: For each slide that uses information from the research sources, include a 'sources' array with the domain names of the sources used (e.g., ['nytimes.com', 'reuters.com']). Only include domain names, not full URLs. If a slide doesn't use any research sources, omit the 'sources' field or set it to an empty array.";
+    jsonFormat = `{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"], "sources": ["https://example.com/article", "https://news.site.com/story"] }] }`;
+    citationInstructions = "\n\nIMPORTANT: For each slide that uses information from the research sources, include a 'sources' array with the FULL URLs of the sources used (e.g., ['https://www.nytimes.com/article', 'https://www.reuters.com/news']). Include complete URLs with https:// protocol. If a slide doesn't use any research sources, omit the 'sources' field or set it to an empty array.";
   }
 
   const systemPrompt = `${systemPrompts[mode]}${citationInstructions}
@@ -76,7 +76,7 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
   // Add recent conversation history if available
   if (conversationHistory && conversationHistory.length > 0) {
     conversationHistory.forEach((msg) => {
-      messages.push({ role: "user", content: msg });
+      messages.push({ role: msg.role, content: msg.content });
     });
   }
 
@@ -170,7 +170,7 @@ app.post("/api/search", async (req, res) => {
       title: r.title,
       url: r.url,
       snippet: r.content,
-      source: new URL(r.url).hostname,
+      source: r.url, // Full URL for citations
     }));
 
     res.json({ results });
