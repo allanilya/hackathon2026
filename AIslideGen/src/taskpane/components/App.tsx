@@ -548,7 +548,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         : `Perfect! Generating ${state.slideCount} slides about ${topic}...`
     );
     dispatch({ type: "ADD_MESSAGE", message: genMsg });
-    await await persistMessage(genMsg);
+    await persistMessage(genMsg);
 
     // Get recent conversation history with proper roles
     const conversationHistory = buildConversationHistory(state.messages);
