@@ -53,7 +53,9 @@ export type ConversationStep =
   | "web_search_results"
   | "web_search_permission"
   | "image_analysis"
-  | "image_followup";
+  | "image_followup"
+  | "editing"
+  | "edit_complete";
 
 export interface ConversationState {
   step: ConversationStep;
@@ -64,6 +66,42 @@ export interface ConversationState {
   additionalContext: string;
   messages: ChatMessage[];
   image?: ImageData;
+}
+
+// ── Edit operation types ──
+
+export type EditOperationType =
+  | "change_title"
+  | "replace_content"
+  | "add_bullets"
+  | "remove_bullets"
+  | "restyle"
+  | "rewrite"
+  | "delete_slide";
+
+export interface EditInstruction {
+  operation: EditOperationType;
+  /** Which shape to target: "title", "content", "sources", or "all" */
+  target?: "title" | "content" | "sources" | "all";
+  /** New text value for text operations */
+  newText?: string;
+  /** Bullets to add (for add_bullets) */
+  bulletsToAdd?: string[];
+  /** Bullet text to match and remove (for remove_bullets) */
+  bulletsToRemove?: string[];
+  /** Style changes (for restyle) */
+  style?: {
+    fontSize?: number;
+    fontColor?: string;
+    bold?: boolean;
+    italic?: boolean;
+    backgroundColor?: string;
+  };
+}
+
+export interface EditResponse {
+  instructions: EditInstruction[];
+  summary: string;
 }
 
 export interface Conversation {

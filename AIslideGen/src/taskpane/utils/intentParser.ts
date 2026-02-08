@@ -190,6 +190,55 @@ export function isQuestion(text: string): boolean {
 }
 
 /**
+ * Detects if the message is a request to edit an existing slide.
+ * Must be checked BEFORE isSlideRequest since "change the slide title" is an edit, not creation.
+ */
+export function isEditRequest(text: string): boolean {
+  const lowerText = text.toLowerCase();
+
+  // Edit verbs + slide/content targets
+  const editVerbs = /\b(edit|change|modify|update|fix|replace|remove|delete|restyle|rewrite|revise|tweak|adjust|rephrase)\b/;
+  const slideTargets = /\b(slide|title|bullet|content|text|heading|point|background|font|color|style|this slide|current slide)\b/;
+
+  if (editVerbs.test(lowerText) && slideTargets.test(lowerText)) {
+    return true;
+  }
+
+  // "make the title...", "make it more...", "make the text..."
+  if (/\bmake\s+(the\s+)?(title|bullet|content|text|slide|it)\b/.test(lowerText)) {
+    return true;
+  }
+
+  // "delete this slide", "remove slide 3"
+  if (/\b(delete|remove)\s+(this\s+)?slide\b/.test(lowerText)) {
+    return true;
+  }
+
+  // "add a bullet about...", "add more points"
+  if (/\badd\s+(a\s+)?(bullet|point|item)\b/.test(lowerText)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Parse the edit request to determine which slide to target
+ */
+export function parseEditTarget(text: string): { scope: "current" | "specific"; slideNumber?: number } {
+  const lowerText = text.toLowerCase();
+
+  // Check for specific slide number: "slide 3", "slide number 5"
+  const slideNumMatch = lowerText.match(/slide\s+(?:number\s+)?(\d+)/);
+  if (slideNumMatch) {
+    return { scope: "specific", slideNumber: parseInt(slideNumMatch[1], 10) };
+  }
+
+  // Default: current slide
+  return { scope: "current" };
+}
+
+/**
  * Detects if the message is clearly a slide generation request
  */
 export function isSlideRequest(text: string): boolean {

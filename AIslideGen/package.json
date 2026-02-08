@@ -29,18 +29,20 @@
   "dependencies": {
     "@fluentui/react-components": "^9.55.1",
     "@fluentui/react-icons": "^2.0.264",
+    "@langchain/core": "^0.3.80",
+    "@langchain/openai": "^0.4.9",
+    "@langchain/tavily": "^0.1.5",
     "@supabase/supabase-js": "^2.95.3",
     "core-js": "^3.36.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "es6-promise": "^4.2.8",
     "express": "^4.21.0",
+    "langchain": "^0.3.37",
     "mammoth": "^1.11.0",
-    "openai": "^4.73.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "regenerator-runtime": "^0.14.1",
-    "tavily": "^1.0.2"
+    "regenerator-runtime": "^0.14.1"
   },
   "devDependencies": {
     "@babel/core": "^7.24.0",

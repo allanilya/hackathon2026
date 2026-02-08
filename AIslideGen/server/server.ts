@@ -1,8 +1,10 @@
 import express from "express";
 import cors from "cors";
-import OpenAI from "openai";
 import dotenv from "dotenv";
-import { TavilyClient } from "tavily";
+import { ChatOpenAI } from "@langchain/openai";
+import { TavilySearch } from "@langchain/tavily";
+import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
+import { indexMessage, indexSlides, retrieveContext, seedConversation } from "./ragStore";
 
 dotenv.config();
 
@@ -10,10 +12,35 @@ const app = express();
 app.use(express.json());
 app.use(cors({ origin: "https://localhost:3000" }));
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const tavilyClient = new TavilyClient({ apiKey: process.env.TAVILY_API_KEY });
+// ChatOpenAI for slide generation and summarization (temperature 0.7)
+const generateModel = new ChatOpenAI({ model: "gpt-4o", temperature: 0.7 });
+
+// ChatOpenAI for edits (lower temperature for precision)
+const editModel = new ChatOpenAI({ model: "gpt-4o", temperature: 0.3 });
 
 type Mode = "generate" | "summarize" | "compare" | "proscons" | "research";
+
+// Helper to convert conversation history to LangChain message types
+function toLangChainMessages(
+  systemPrompt: string,
+  history: Array<{ role: "user" | "assistant"; content: string }> | undefined,
+  userMessage: string,
+  ragContext?: string[]
+): BaseMessage[] {
+  let augmentedPrompt = systemPrompt;
+  if (ragContext && ragContext.length > 0) {
+    augmentedPrompt += `\n\n--- RELEVANT CONVERSATION CONTEXT ---\nThe following are relevant excerpts from earlier in this conversation. Use them to maintain context awareness:\n${ragContext.join("\n\n")}\n--- END CONTEXT ---`;
+  }
+
+  const messages: BaseMessage[] = [new SystemMessage(augmentedPrompt)];
+  if (history?.length) {
+    for (const msg of history) {
+      messages.push(msg.role === "user" ? new HumanMessage(msg.content) : new AIMessage(msg.content));
+    }
+  }
+  messages.push(new HumanMessage(userMessage));
+  return messages;
+}
 
 const systemPrompts: Record<Mode, string> = {
   generate:
@@ -29,13 +56,14 @@ const systemPrompts: Record<Mode, string> = {
 };
 
 app.post("/api/generate", async (req, res) => {
-  const { input, mode, slideCount, tone, additionalContext, conversationHistory } = req.body as {
+  const { input, mode, slideCount, tone, additionalContext, conversationHistory, conversationId } = req.body as {
     input: string;
     mode: Mode;
     slideCount: number;
     tone: string;
     additionalContext?: string;
     conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+    conversationId?: string;
   };
 
   if (!input || !mode) {
@@ -68,29 +96,22 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
     userMessage += `\n\nAdditional context: ${additionalContext}`;
   }
 
-  // Build messages array with conversation history for context
-  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
-    { role: "system", content: systemPrompt },
-  ];
-
-  // Add recent conversation history if available
-  if (conversationHistory && conversationHistory.length > 0) {
-    conversationHistory.forEach((msg) => {
-      messages.push({ role: msg.role, content: msg.content });
-    });
+  // RAG: Seed store if needed, index user message, retrieve relevant context
+  let ragContext: string[] = [];
+  if (conversationId) {
+    if (conversationHistory?.length) {
+      await seedConversation(conversationId, conversationHistory);
+    }
+    await indexMessage(conversationId, "user", userMessage);
+    ragContext = await retrieveContext(conversationId, userMessage, 5);
+    console.log(`[RAG] Retrieved ${ragContext.length} context chunks for generate`);
   }
 
-  // Add the current user message
-  messages.push({ role: "user", content: userMessage });
+  const langchainMessages = toLangChainMessages(systemPrompt, conversationHistory?.slice(-4), userMessage, ragContext);
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages,
-      temperature: 0.7,
-    });
-
-    const content = completion.choices[0]?.message?.content || "";
+    const response = await generateModel.invoke(langchainMessages);
+    const content = typeof response.content === "string" ? response.content : "";
 
     // Extract JSON from the response (handle markdown code blocks)
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -101,9 +122,19 @@ Generate exactly ${slideCount || 3} slides. Use a ${tone || "professional"} tone
 
     const parsed = JSON.parse(jsonMatch[0]);
     console.log("Generated slides:", JSON.stringify(parsed, null, 2));
+
+    // RAG: Index the generated slides for future retrieval
+    if (conversationId && parsed.slides) {
+      const slidesSummary = parsed.slides
+        .map((s: any, i: number) => `Slide ${i + 1}: ${s.title} - ${s.bullets.join("; ")}`)
+        .join("\n");
+      await indexSlides(conversationId, parsed.slides);
+      await indexMessage(conversationId, "assistant", slidesSummary, { type: "slide_summary" });
+    }
+
     res.json(parsed);
   } catch (error: unknown) {
-    console.error("OpenAI error:", error);
+    console.error("LangChain error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
   }
@@ -123,19 +154,15 @@ app.post("/api/summarize", async (req, res) => {
       : "You are a summarization expert. The user will provide the text content of an entire presentation. Write a clear, concise summary of the whole presentation in a short paragraph (4-6 sentences). Respond with plain text only, no JSON or markdown formatting.";
 
   try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: input },
-      ],
-      temperature: 0.7,
-    });
+    const response = await generateModel.invoke([
+      new SystemMessage(systemPrompt),
+      new HumanMessage(input),
+    ]);
 
-    const content = completion.choices[0]?.message?.content || "";
+    const content = typeof response.content === "string" ? response.content : "";
     res.json({ summary: content.trim() });
   } catch (error: unknown) {
-    console.error("OpenAI error:", error);
+    console.error("LangChain error:", error);
     const message = error instanceof Error ? error.message : "Unknown error";
     res.status(500).json({ error: message });
   }
@@ -171,25 +198,30 @@ app.post("/api/search", async (req, res) => {
   console.log(`[Tavily] Searching for: "${searchQuery}" (max ${maxResults} results, slides: ${slideCount}, current events: ${isCurrentEvents})`);
 
   try {
-    const response = await tavilyClient.search({
-      query: searchQuery,
-      max_results: maxResults,
-      include_answer: false,
-      search_depth: "advanced", // Use advanced for better source diversity
-      include_raw_content: false, // Don't need full content, just snippets
+    // Create a per-request TavilySearch instance to support dynamic maxResults
+    const searchTool = new TavilySearch({
+      maxResults: maxResults,
+      searchDepth: "advanced",
+      includeAnswer: false,
+      includeRawContent: false,
     });
 
-    console.log(`[Tavily] Found ${response.results.length} results`);
+    const rawResults = await searchTool.invoke({ query: searchQuery });
 
-    const results = response.results.map((r) => {
-      // Log the URL to debug category page issue
+    // TavilySearch returns a JSON string; parse it defensively
+    const parsedResults = typeof rawResults === "string" ? JSON.parse(rawResults) : rawResults;
+    const resultArray = Array.isArray(parsedResults) ? parsedResults : (parsedResults.results || []);
+
+    console.log(`[Tavily] Found ${resultArray.length} results`);
+
+    const results = resultArray.map((r: { title: string; url: string; content: string }) => {
       console.log(`[Tavily] Result URL: ${r.url}`);
 
       return {
         title: r.title,
         url: r.url,
         snippet: r.content,
-        source: r.url, // Full URL for citations
+        source: r.url,
       };
     });
 
@@ -197,7 +229,6 @@ app.post("/api/search", async (req, res) => {
   } catch (error: unknown) {
     console.error("[Tavily] Search error:", error);
 
-    // Provide more detailed error information
     if (error instanceof Error) {
       console.error("[Tavily] Error message:", error.message);
       console.error("[Tavily] Error stack:", error.stack);
@@ -256,6 +287,125 @@ app.post("/api/fetch-article", async (req, res) => {
 
     const message = error instanceof Error ? error.message : "Article fetch failed";
     res.status(500).json({ error: `Failed to fetch article: ${message}` });
+  }
+});
+
+app.post("/api/edit", async (req, res) => {
+  const { slideContent, editRequest, conversationHistory, conversationId } = req.body as {
+    slideContent: {
+      shapes: Array<{
+        index: number;
+        name: string;
+        text: string;
+        role: string;
+      }>;
+    };
+    editRequest: string;
+    conversationHistory?: Array<{ role: "user" | "assistant"; content: string }>;
+    conversationId?: string;
+  };
+
+  if (!slideContent || !editRequest) {
+    res.status(400).json({ error: "slideContent and editRequest are required" });
+    return;
+  }
+
+  console.log("[Edit] Request:", editRequest);
+
+  const systemPrompt = `You are a PowerPoint slide editing assistant. The user wants to modify an existing slide.
+
+You will receive the current slide content (shapes with their roles and text) and the user's edit request.
+
+Respond ONLY with valid JSON containing edit instructions. Available operations:
+
+- "change_title": Change the title text. Requires "newText".
+- "replace_content": Replace the entire content/body text. Requires "newText" with bullet points formatted as "• Point 1\\n• Point 2".
+- "add_bullets": Add new bullet points. Requires "bulletsToAdd" (array of strings, WITHOUT the bullet character).
+- "remove_bullets": Remove bullet points matching text. Requires "bulletsToRemove" (array of partial text matches to identify which bullets to remove).
+- "restyle": Change visual styling. Requires "target" ("title", "content", or "all") and "style" object with optional: fontSize (number), fontColor (hex string like "#FF0000"), bold (boolean), italic (boolean), backgroundColor (hex string).
+- "rewrite": AI-rewrite of content while keeping the same meaning. Requires "target" ("title" or "content") and "newText". For content, format as "• Point 1\\n• Point 2".
+- "delete_slide": Delete the entire slide. No additional fields needed.
+
+Respond ONLY with valid JSON in this format:
+{
+  "instructions": [
+    { "operation": "change_title", "newText": "New Title Here" }
+  ],
+  "summary": "Brief description of what was changed"
+}
+
+You may include multiple instructions for complex edits. Do not include any text outside the JSON.`;
+
+  // Build user message with slide context
+  let slideDescription = "Current slide content:\n";
+  for (const shape of slideContent.shapes) {
+    if (shape.text) {
+      slideDescription += `- [${shape.role}] "${shape.text}"\n`;
+    }
+  }
+  slideDescription += `\nUser's edit request: ${editRequest}`;
+
+  // RAG: Index edit request and retrieve relevant context
+  let ragContext: string[] = [];
+  if (conversationId) {
+    await indexMessage(conversationId, "user", editRequest);
+    ragContext = await retrieveContext(conversationId, editRequest, 3);
+    console.log(`[RAG] Retrieved ${ragContext.length} context chunks for edit`);
+  }
+
+  const langchainMessages = toLangChainMessages(
+    systemPrompt,
+    conversationHistory?.slice(-4),
+    slideDescription,
+    ragContext
+  );
+
+  try {
+    const response = await editModel.invoke(langchainMessages);
+    const content = typeof response.content === "string" ? response.content : "";
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      res.status(500).json({ error: "Failed to parse AI edit response" });
+      return;
+    }
+
+    const parsed = JSON.parse(jsonMatch[0]);
+    console.log("[Edit] Generated instructions:", JSON.stringify(parsed, null, 2));
+
+    // RAG: Index the edit result
+    if (conversationId && parsed.summary) {
+      await indexMessage(conversationId, "assistant", `Edit applied: ${parsed.summary}`, { type: "edit" });
+    }
+
+    res.json(parsed);
+  } catch (error: unknown) {
+    console.error("[Edit] LangChain error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
+  }
+});
+
+// RAG: Seed a conversation with historical messages
+app.post("/api/rag/seed", async (req, res) => {
+  const { conversationId, messages } = req.body as {
+    conversationId: string;
+    messages: Array<{ role: string; content: string }>;
+  };
+
+  if (!conversationId || !messages?.length) {
+    res.status(400).json({ error: "conversationId and messages are required" });
+    return;
+  }
+
+  try {
+    await seedConversation(conversationId, messages);
+    console.log(`[RAG] Seeded conversation ${conversationId} with ${messages.length} messages`);
+    res.json({ success: true, indexed: messages.length });
+  } catch (error: unknown) {
+    console.error("[RAG] Seed error:", error);
+    const message = error instanceof Error ? error.message : "Unknown error";
+    res.status(500).json({ error: message });
   }
 });
 

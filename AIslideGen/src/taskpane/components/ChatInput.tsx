@@ -23,6 +23,7 @@ import {
   Globe24Regular,
   Dismiss16Regular,
   PaintBrush24Regular,
+  Edit24Regular,
 } from "@fluentui/react-icons";
 import { parseFile } from "../utils/fileParser";
 import { processImage, ImageData } from "../utils/imageHandler";
@@ -50,6 +51,7 @@ interface ChatInputProps {
   onDismissWebSearch?: () => void;
   selectedTheme?: SlideTheme;
   onThemeChange?: (theme: SlideTheme) => void;
+  onEditSlide?: () => void;
 }
 
 const useStyles = makeStyles({
@@ -141,6 +143,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onDismissWebSearch,
   selectedTheme = "professional",
   onThemeChange,
+  onEditSlide,
 }) => {
   const styles = useStyles();
   const [text, setText] = useState("");
@@ -291,6 +294,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 </MenuPopover>
               </Menu>
 
+              <MenuItem icon={<Edit24Regular />} onClick={onEditSlide}>Edit Current Slide</MenuItem>
               <MenuItem icon={<Globe24Regular />} onClick={onWebSearch}>Web Search</MenuItem>
               <MenuItem icon={<ArrowUpload24Regular />} onClick={handleUploadClick}>
                 Upload Notes
