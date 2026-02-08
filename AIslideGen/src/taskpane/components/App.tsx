@@ -1,16 +1,25 @@
 import * as React from "react";
-import { useReducer, useState, useEffect, useCallback } from "react";
+import { useReducer, useState, useEffect, useCallback, useRef } from "react";
 import Header from "./Header";
 import ChatContainer from "./ChatContainer";
 import ChatInput from "./ChatInput";
 import ConversationSelector from "./ConversationSelector";
-import { Button, makeStyles, tokens } from "@fluentui/react-components";
-import { ArrowReset24Regular } from "@fluentui/react-icons";
+import AuthScreen from "./AuthScreen";
+import { Button, makeStyles, tokens, Spinner } from "@fluentui/react-components";
+import { ArrowReset24Regular, SignOut20Regular } from "@fluentui/react-icons";
 import { createSlide } from "../taskpane";
 import { useSlideDetection } from "../hooks/useSlideDetection";
 import { getSlideContent, getAllSlidesContent } from "../services/slideService";
 import { questions } from "../questions";
 import { parseUserIntent } from "../utils/intentParser";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  fetchConversations,
+  fetchMessages,
+  createConversation,
+  updateConversation,
+  saveMessage,
+} from "../services/conversationService";
 import type { ConversationState, ConversationStep, ChatMessage, ChatOption, GeneratedSlide, Mode, Tone, SearchResult, Conversation } from "../types";
 
 /* global fetch */
@@ -33,6 +42,19 @@ const useStyles = makeStyles({
     paddingBottom: "8px",
     paddingLeft: "12px",
     paddingRight: "12px",
+  },
+  loadingRoot: {
+    height: "100vh",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: tokens.colorNeutralBackground2,
+  },
+  signOutRow: {
+    display: "flex",
+    justifyContent: "flex-end",
+    paddingRight: "12px",
+    paddingTop: "4px",
   },
 });
 
@@ -151,56 +173,198 @@ function deriveConversationTitle(state: ConversationState): string {
 
 const App: React.FC<AppProps> = (props: AppProps) => {
   const styles = useStyles();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [state, dispatch] = useReducer(chatReducer, initialState);
   const [isTyping, setIsTyping] = useState(false);
   const [slides, setSlides] = useState<GeneratedSlide[]>([]);
   const [selectedValues, setSelectedValues] = useState<Record<string, string>>({});
   const [isWebSearchMode, setIsWebSearchMode] = useState(false);
+  const [loadingConversations, setLoadingConversations] = useState(true);
 
   // Multi-conversation state
-  const [conversations, setConversations] = useState<Conversation[]>(() => {
-    const id = generateConvId();
-    return [{ id, title: "New Chat", state: initialState, slides: [], selectedValues: {}, createdAt: Date.now() }];
-  });
-  const [activeConversationId, setActiveConversationId] = useState<string>(() => conversations[0].id);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string>("");
 
-  // Sync current state back to conversations list whenever state/slides/selectedValues change
+  // Ref to track whether we should persist (skip during initial load)
+  const isRestoringRef = useRef(false);
+  // Debounce timer for saving conversation state
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ── Load conversations from Supabase on login ──
   useEffect(() => {
+    if (!user) {
+      setConversations([]);
+      setActiveConversationId("");
+      setLoadingConversations(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+
+    async function load() {
+      setLoadingConversations(true);
+      try {
+        const convs = await fetchConversations(user.id);
+
+        if (cancelled) return;
+
+        if (convs.length === 0) {
+          // Create a fresh conversation
+          const id = generateConvId();
+          const newConv: Conversation = {
+            id,
+            title: "New Chat",
+            state: initialState,
+            slides: [],
+            selectedValues: {},
+            createdAt: Date.now(),
+          };
+          await createConversation(user.id, newConv);
+          setConversations([newConv]);
+          setActiveConversationId(id);
+          dispatch({ type: "RESET" });
+          setSlides([]);
+          setSelectedValues({});
+
+          // Show greeting
+          const greeting = makeAssistantMessage(
+            "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+          );
+          dispatch({ type: "ADD_MESSAGE", message: greeting });
+          await saveMessage(id, greeting).catch(() => {});
+        } else {
+          // Load the most recent conversation fully
+          const latest = convs[0];
+          const messages = await fetchMessages(latest.id);
+          latest.state.messages = messages;
+
+          setConversations(convs);
+          setActiveConversationId(latest.id);
+
+          // Restore state
+          isRestoringRef.current = true;
+          dispatch({ type: "RESET" });
+          setSlides(latest.slides);
+          setSelectedValues(latest.selectedValues);
+
+          setTimeout(() => {
+            dispatch({ type: "SET_STEP", step: latest.state.step });
+            dispatch({ type: "SET_USER_PROMPT", prompt: latest.state.userPrompt });
+            dispatch({ type: "SET_MODE", mode: latest.state.mode });
+            dispatch({ type: "SET_SLIDE_COUNT", count: latest.state.slideCount });
+            dispatch({ type: "SET_TONE", tone: latest.state.tone });
+            dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: latest.state.additionalContext });
+            messages.forEach((msg) => {
+              dispatch({ type: "ADD_MESSAGE", message: msg });
+            });
+
+            // If the latest conversation has no messages, show greeting
+            if (messages.length === 0) {
+              const greeting = makeAssistantMessage(
+                "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+              );
+              dispatch({ type: "ADD_MESSAGE", message: greeting });
+              saveMessage(latest.id, greeting).catch(() => {});
+            }
+
+            // Allow persistence again after restore completes
+            setTimeout(() => {
+              isRestoringRef.current = false;
+            }, 100);
+          }, 0);
+        }
+      } catch (err) {
+        console.error("Failed to load conversations:", err);
+        // Fallback: create a local conversation
+        const id = generateConvId();
+        const newConv: Conversation = {
+          id,
+          title: "New Chat",
+          state: initialState,
+          slides: [],
+          selectedValues: {},
+          createdAt: Date.now(),
+        };
+        setConversations([newConv]);
+        setActiveConversationId(id);
+        dispatch({ type: "RESET" });
+
+        const greeting = makeAssistantMessage(
+          "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
+        );
+        dispatch({ type: "ADD_MESSAGE", message: greeting });
+      } finally {
+        if (!cancelled) setLoadingConversations(false);
+      }
+    }
+
+    load();
+    return () => { cancelled = true; };
+  }, [user]);
+
+  // Sync current state back to conversations list and debounce-save to Supabase
+  useEffect(() => {
+    if (!activeConversationId) return;
+
+    const title = deriveConversationTitle(state);
     setConversations((prev) =>
       prev.map((c) =>
         c.id === activeConversationId
-          ? { ...c, state, slides, selectedValues, title: deriveConversationTitle(state) }
+          ? { ...c, state, slides, selectedValues, title }
           : c
       )
     );
-  }, [state, slides, selectedValues, activeConversationId]);
 
-  const handleSelectConversation = useCallback((id: string) => {
-    // Save current state is already handled by the effect above
+    // Debounced save to Supabase (skip during restore)
+    if (!isRestoringRef.current && user) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = setTimeout(() => {
+        const stateWithoutMessages = { ...state, messages: [] };
+        updateConversation(activeConversationId, {
+          title,
+          state: stateWithoutMessages,
+          slides,
+          selectedValues,
+        }).catch((err) => console.error("Failed to save conversation:", err));
+      }, 1000);
+    }
+  }, [state, slides, selectedValues, activeConversationId, user]);
+
+  const handleSelectConversation = useCallback(async (id: string) => {
     const target = conversations.find((c) => c.id === id);
     if (!target || target.id === activeConversationId) return;
+
+    // Load messages for the target conversation if needed
+    let messages = target.state.messages;
+    if (messages.length === 0) {
+      try {
+        messages = await fetchMessages(id);
+      } catch (err) {
+        console.error("Failed to load messages:", err);
+      }
+    }
+
     setActiveConversationId(id);
-    // Restore target conversation state
+    isRestoringRef.current = true;
     dispatch({ type: "RESET" });
     setSlides(target.slides);
     setSelectedValues(target.selectedValues);
-    // Restore full state by dispatching individual actions then replacing messages
-    // We'll use a special restore approach: reset then replay
+
     setTimeout(() => {
-      // Restore the full state
       dispatch({ type: "SET_STEP", step: target.state.step });
       dispatch({ type: "SET_USER_PROMPT", prompt: target.state.userPrompt });
       dispatch({ type: "SET_MODE", mode: target.state.mode });
       dispatch({ type: "SET_SLIDE_COUNT", count: target.state.slideCount });
       dispatch({ type: "SET_TONE", tone: target.state.tone });
       dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: target.state.additionalContext });
-      target.state.messages.forEach((msg) => {
+      messages.forEach((msg) => {
         dispatch({ type: "ADD_MESSAGE", message: msg });
       });
+      setTimeout(() => { isRestoringRef.current = false; }, 100);
     }, 0);
   }, [conversations, activeConversationId]);
 
-  const handleNewConversation = useCallback(() => {
+  const handleNewConversation = useCallback(async () => {
     const id = generateConvId();
     const newConv: Conversation = {
       id,
@@ -210,6 +374,14 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       selectedValues: {},
       createdAt: Date.now(),
     };
+
+    // Save to Supabase
+    if (user) {
+      createConversation(user.id, newConv).catch((err) =>
+        console.error("Failed to create conversation:", err)
+      );
+    }
+
     setConversations((prev) => [newConv, ...prev]);
     setActiveConversationId(id);
     dispatch({ type: "RESET" });
@@ -222,21 +394,26 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
       );
       dispatch({ type: "ADD_MESSAGE", message: greeting });
+      saveMessage(id, greeting).catch(() => {});
     }, 100);
-  }, []);
+  }, [user]);
 
   // Always-on slide detection
   const { currentSlide, totalSlides } = useSlideDetection({
     enabled: true,
   });
 
-  // Show initial greeting on mount
-  useEffect(() => {
-    const greeting = makeAssistantMessage(
-      "Hi! I'm Spark. Tell me what you'd like to create a presentation about."
-    );
-    dispatch({ type: "ADD_MESSAGE", message: greeting });
-  }, []);
+  // Helper to save a message to Supabase (fire-and-forget)
+  const persistMessage = useCallback(
+    (message: ChatMessage) => {
+      if (user && activeConversationId) {
+        saveMessage(activeConversationId, message).catch((err) =>
+          console.error("Failed to save message:", err)
+        );
+      }
+    },
+    [user, activeConversationId]
+  );
 
   const advanceConversation = useCallback(
     async (currentStep: ConversationStep) => {
@@ -262,9 +439,10 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
         const msg = makeAssistantMessage(text, questionConfig.options, questionConfig.allowOther);
         dispatch({ type: "ADD_MESSAGE", message: msg });
+        persistMessage(msg);
       }
     },
-    []
+    [persistMessage]
   );
 
   const generateSlides = useCallback(async () => {
@@ -312,6 +490,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       state.mode === "research" ? "Creating slides from research..." : "Perfect! Generating your slides now..."
     );
     dispatch({ type: "ADD_MESSAGE", message: genMsg });
+    persistMessage(genMsg);
 
     try {
       const response = await fetch("/api/generate", {
@@ -341,15 +520,17 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         `Here are your ${data.slides?.length || 0} slides! You can insert them individually or all at once into your presentation.`
       );
       dispatch({ type: "ADD_MESSAGE", message: doneMsg });
+      persistMessage(doneMsg);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to generate slides";
       const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
       dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+      persistMessage(errorMsg);
       dispatch({ type: "SET_STEP", step: "anything_else" });
     } finally {
       setIsTyping(false);
     }
-  }, [state.userPrompt, state.mode, state.slideCount, state.tone, state.additionalContext]);
+  }, [state.userPrompt, state.mode, state.slideCount, state.tone, state.additionalContext, persistMessage]);
 
   const handleSummarize = useCallback(async () => {
     dispatch({ type: "SET_STEP", step: "summarize_ask" });
@@ -366,7 +547,8 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       ]
     );
     dispatch({ type: "ADD_MESSAGE", message: askMsg });
-  }, []);
+    persistMessage(askMsg);
+  }, [persistMessage]);
 
   const handleWebSearch = useCallback(async () => {
     setIsWebSearchMode(true);
@@ -395,6 +577,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
         : "Summarizing the entire slideshow..."
     );
     dispatch({ type: "ADD_MESSAGE", message: genMsg });
+    persistMessage(genMsg);
 
     try {
       let contentText: string;
@@ -436,15 +619,17 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
       const summaryMsg = makeAssistantMessage(data.summary || "No summary available.");
       dispatch({ type: "ADD_MESSAGE", message: summaryMsg });
+      persistMessage(summaryMsg);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to generate summary";
       const errorMsg = makeAssistantMessage(`Sorry, something went wrong: ${message}. Please try again.`);
       dispatch({ type: "ADD_MESSAGE", message: errorMsg });
+      persistMessage(errorMsg);
       dispatch({ type: "SET_STEP", step: "initial" });
     } finally {
       setIsTyping(false);
     }
-  }, []);
+  }, [persistMessage]);
 
   const runWebSearch = useCallback(async (query: string) => {
     dispatch({ type: "SET_STEP", step: "web_search_results" });
@@ -572,6 +757,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       // Add user message
       const userMsg = makeUserMessage(text);
       dispatch({ type: "ADD_MESSAGE", message: userMsg });
+      persistMessage(userMsg);
 
       const currentStep = state.step;
 
@@ -635,6 +821,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
 
               const msg = makeAssistantMessage(questionText, questionConfig.options, questionConfig.allowOther);
               dispatch({ type: "ADD_MESSAGE", message: msg });
+              persistMessage(msg);
             }
           }
           break;
@@ -691,7 +878,7 @@ const App: React.FC<AppProps> = (props: AppProps) => {
           break;
       }
     },
-    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch]
+    [state.step, advanceConversation, generateSlides, runSummarize, runWebSearch, persistMessage]
   );
 
   const handleOptionSelect = useCallback(
@@ -714,18 +901,20 @@ const App: React.FC<AppProps> = (props: AppProps) => {
       if (state.step === "initial") {
         const userMsg = makeUserMessage(`Uploaded: ${fileName}`);
         dispatch({ type: "ADD_MESSAGE", message: userMsg });
+        persistMessage(userMsg);
         dispatch({ type: "SET_USER_PROMPT", prompt: extractedText });
         await advanceConversation("initial");
       } else if (state.step === "anything_else") {
         const userMsg = makeUserMessage(`Uploaded: ${fileName}`);
         dispatch({ type: "ADD_MESSAGE", message: userMsg });
+        persistMessage(userMsg);
         dispatch({ type: "SET_ADDITIONAL_CONTEXT", text: extractedText });
         dispatch({ type: "SET_STEP", step: "generating" });
         await delay(300);
         await generateSlides();
       }
     },
-    [state.step, advanceConversation, generateSlides]
+    [state.step, advanceConversation, generateSlides, persistMessage]
   );
 
   const handleReset = useCallback(() => {
@@ -742,11 +931,43 @@ const App: React.FC<AppProps> = (props: AppProps) => {
     }
   };
 
+  // ── Auth gate ──
+
+  if (authLoading) {
+    return (
+      <div className={styles.loadingRoot}>
+        <Spinner size="medium" label="Loading..." />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <AuthScreen />;
+  }
+
+  if (loadingConversations) {
+    return (
+      <div className={styles.loadingRoot}>
+        <Spinner size="medium" label="Loading conversations..." />
+      </div>
+    );
+  }
+
   const inputDisabled = state.step === "generating" || isTyping;
 
   return (
     <div className={styles.root}>
       <Header logo="assets/logo-filled.png" title={props.title} />
+      <div className={styles.signOutRow}>
+        <Button
+          appearance="subtle"
+          icon={<SignOut20Regular />}
+          onClick={signOut}
+          size="small"
+        >
+          Sign Out
+        </Button>
+      </div>
       <ConversationSelector
         conversations={conversations}
         activeConversationId={activeConversationId}
