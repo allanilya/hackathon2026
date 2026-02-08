@@ -8,9 +8,9 @@ import {
   MenuPopover,
   MenuList,
   MenuItem,
-  Avatar,
+  Button,
 } from "@fluentui/react-components";
-import { SignOut20Regular, Premium20Regular } from "@fluentui/react-icons";
+import { SignOut20Regular, Premium20Regular, Person20Regular, WeatherMoon20Regular, WeatherSunny20Regular } from "@fluentui/react-icons";
 import type { User } from "@supabase/supabase-js";
 
 export interface HeaderProps {
@@ -18,6 +18,8 @@ export interface HeaderProps {
   logo: string;
   user?: User | null;
   onSignOut?: () => void;
+  isDarkMode?: boolean;
+  onToggleTheme?: () => void;
 }
 
 const useStyles = makeStyles({
@@ -25,32 +27,36 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     gap: "12px",
-    paddingTop: "16px",
-    paddingBottom: "12px",
-    paddingLeft: "20px",
-    paddingRight: "20px",
-    backgroundColor: tokens.colorNeutralBackground3,
+    paddingTop: "20px",
+    paddingBottom: "16px",
+    paddingLeft: "24px",
+    paddingRight: "24px",
+    backgroundColor: tokens.colorNeutralBackground1,
+    borderBottom: `1px solid ${tokens.colorNeutralStroke2}`,
     justifyContent: "space-between",
   },
   leftGroup: {
     display: "flex",
     alignItems: "center",
-    gap: "12px",
+    gap: "14px",
   },
   textGroup: {
     display: "flex",
     flexDirection: "column",
   },
   title: {
-    fontSize: tokens.fontSizeBase500,
+    fontSize: "20px",
     fontWeight: tokens.fontWeightSemibold,
     margin: "0",
-    lineHeight: tokens.lineHeightBase500,
+    lineHeight: "1.2",
+    color: tokens.colorNeutralForeground1,
+    letterSpacing: "-0.02em",
   },
   subtitle: {
-    fontSize: tokens.fontSizeBase200,
+    fontSize: "12px",
     color: tokens.colorNeutralForeground3,
     margin: "0",
+    marginTop: "2px",
   },
   profileButton: {
     cursor: "pointer",
@@ -58,13 +64,8 @@ const useStyles = makeStyles({
 });
 
 const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
-  const { title, logo, user, onSignOut } = props;
+  const { title, logo, user, onSignOut, isDarkMode, onToggleTheme } = props;
   const styles = useStyles();
-
-  const getInitials = (email: string | undefined): string => {
-    if (!email) return "U";
-    return email.charAt(0).toUpperCase();
-  };
 
   const handleSubscriptionClick = () => {
     window.open("https://billing.stripe.com/p/login/test_00000000000000", "_blank");
@@ -83,17 +84,24 @@ const Header: React.FC<HeaderProps> = (props: HeaderProps) => {
       {user && (
         <Menu>
           <MenuTrigger disableButtonEnhancement>
-            <Avatar
+            <Button
               className={styles.profileButton}
-              name={user.email}
-              size={32}
-              initials={getInitials(user.email)}
-              color="colorful"
+              appearance="subtle"
+              icon={<Person20Regular />}
+              size="small"
             />
           </MenuTrigger>
 
           <MenuPopover>
             <MenuList>
+              {onToggleTheme && (
+                <MenuItem
+                  icon={isDarkMode ? <WeatherSunny20Regular /> : <WeatherMoon20Regular />}
+                  onClick={onToggleTheme}
+                >
+                  {isDarkMode ? "Light Mode" : "Dark Mode"}
+                </MenuItem>
+              )}
               <MenuItem icon={<Premium20Regular />} onClick={handleSubscriptionClick}>
                 View Subscription
               </MenuItem>

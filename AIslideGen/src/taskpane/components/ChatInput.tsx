@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useState, useRef } from "react";
 import {
-  Input,
+  Textarea,
   Button,
   makeStyles,
   tokens,
@@ -23,6 +23,7 @@ import {
   Globe24Regular,
   Dismiss16Regular,
   PaintBrush24Regular,
+  Edit24Regular,
 } from "@fluentui/react-icons";
 import { parseFile } from "../utils/fileParser";
 import { processImage, ImageData } from "../utils/imageHandler";
@@ -50,21 +51,22 @@ interface ChatInputProps {
   onDismissWebSearch?: () => void;
   selectedTheme?: SlideTheme;
   onThemeChange?: (theme: SlideTheme) => void;
+  onEditSlide?: () => void;
 }
 
 const useStyles = makeStyles({
   container: {
-    borderTop: `1px solid ${tokens.colorNeutralStroke2}`,
-    backgroundColor: tokens.colorNeutralBackground1,
+    borderTop: `1px solid ${tokens.colorNeutralStroke1}`,
+    backgroundColor: tokens.colorNeutralBackground2,
   },
   inputRow: {
     display: "flex",
     alignItems: "center",
-    gap: "6px",
-    paddingTop: "10px",
-    paddingBottom: "6px",
-    paddingLeft: "8px",
-    paddingRight: "12px",
+    gap: "8px",
+    paddingTop: "14px",
+    paddingBottom: "10px",
+    paddingLeft: "16px",
+    paddingRight: "16px",
   },
   input: {
     flex: "1",
@@ -79,34 +81,36 @@ const useStyles = makeStyles({
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingBottom: "8px",
-    paddingLeft: "12px",
-    paddingRight: "12px",
+    paddingBottom: "10px",
+    paddingLeft: "16px",
+    paddingRight: "16px",
   },
   slideIndicator: {
     fontSize: "11px",
     color: tokens.colorNeutralForeground3,
     userSelect: "none",
+    fontWeight: tokens.fontWeightMedium,
   },
   activeIndicatorRow: {
     display: "flex",
     gap: "8px",
-    paddingLeft: "12px",
-    paddingRight: "12px",
-    paddingTop: "8px",
-    paddingBottom: "4px",
+    paddingLeft: "16px",
+    paddingRight: "16px",
+    paddingTop: "10px",
+    paddingBottom: "6px",
   },
   activeIndicatorChip: {
     display: "inline-flex",
     alignItems: "center",
     gap: "6px",
-    backgroundColor: tokens.colorBrandBackground2,
-    color: tokens.colorBrandForeground2,
-    borderRadius: "12px",
-    paddingTop: "4px",
-    paddingBottom: "4px",
-    paddingLeft: "10px",
-    paddingRight: "8px",
+    backgroundColor: "rgba(234, 129, 95, 0.15)",
+    color: "#EA815F",
+    border: "1px solid rgba(234, 129, 95, 0.3)",
+    borderRadius: "16px",
+    paddingTop: "6px",
+    paddingBottom: "6px",
+    paddingLeft: "12px",
+    paddingRight: "10px",
     fontSize: "12px",
     fontWeight: tokens.fontWeightSemibold,
   },
@@ -139,6 +143,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onDismissWebSearch,
   selectedTheme = "professional",
   onThemeChange,
+  onEditSlide,
 }) => {
   const styles = useStyles();
   const [text, setText] = useState("");
@@ -196,6 +201,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // Cmd+Enter (Mac) or Ctrl+Enter (Windows) inserts a newline
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      // Allow default behavior (insert newline)
+      return;
+    }
+
+    // Plain Enter (without Shift, Cmd, or Ctrl) sends the message
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -282,6 +294,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 </MenuPopover>
               </Menu>
 
+              <MenuItem icon={<Edit24Regular />} onClick={onEditSlide}>Edit Current Slide</MenuItem>
               <MenuItem icon={<Globe24Regular />} onClick={onWebSearch}>Web Search</MenuItem>
               <MenuItem icon={<ArrowUpload24Regular />} onClick={handleUploadClick}>
                 Upload Notes
@@ -297,7 +310,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             </MenuList>
           </MenuPopover>
         </Menu>
-        <Input
+        <Textarea
           className={styles.input}
           placeholder={placeholder}
           value={text}
@@ -305,6 +318,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onKeyDown={handleKeyDown}
           disabled={disabled}
           size="medium"
+          resize="vertical"
+          rows={1}
         />
         <Button
           appearance="primary"

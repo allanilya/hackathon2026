@@ -33,7 +33,7 @@ export async function fetchConversations(userId: string, documentId?: string): P
     .select("*")
     .eq("user_id", userId);
 
-  // Filter by document_id if provided
+  // Filter by document ID if provided
   if (documentId) {
     query = query.eq("document_id", documentId);
   }
@@ -49,6 +49,7 @@ export async function fetchConversations(userId: string, documentId?: string): P
     slides: row.slides,
     selectedValues: row.selected_values,
     createdAt: new Date(row.created_at).getTime(),
+    documentId: row.document_id ?? undefined,
   }));
 }
 
@@ -77,15 +78,14 @@ export async function fetchMessages(conversationId: string): Promise<ChatMessage
 
 export async function createConversation(
   userId: string,
-  conversation: Conversation,
-  documentId?: string
+  conversation: Conversation
 ): Promise<string> {
   const { data, error } = await supabase
     .from("conversations")
     .insert({
       id: conversation.id,
       user_id: userId,
-      document_id: documentId ?? null,
+      document_id: conversation.documentId ?? null,
       title: conversation.title,
       state: conversation.state,
       slides: conversation.slides,

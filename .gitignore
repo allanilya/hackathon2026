@@ -1,3 +1,10 @@
 .history/
 .env
 node_modules/
+
+# Next.js build artifacts
+extension/.next/
+extension/node_modules/
+extension/next-env.d.ts
+extension/out/
+extension/.vercel/

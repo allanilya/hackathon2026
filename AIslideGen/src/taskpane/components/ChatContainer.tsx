@@ -12,9 +12,10 @@ interface ChatContainerProps {
   onOtherSubmit: (messageId: string, text: string) => void;
   isTyping: boolean;
   slides: GeneratedSlide[];
-  onInsertSlide: (slide: GeneratedSlide) => void;
+  onInsertSlide: (slide: GeneratedSlide, index: number) => void;
   onInsertAll: () => void;
   selectedValues: Record<string, string>;
+  insertedSlideIndexes?: Set<number>;
 }
 
 const useStyles = makeStyles({
@@ -23,12 +24,12 @@ const useStyles = makeStyles({
     overflowY: "auto",
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
-    paddingTop: "12px",
-    paddingBottom: "12px",
-    paddingLeft: "12px",
-    paddingRight: "12px",
-    backgroundColor: tokens.colorNeutralBackground2,
+    gap: "16px",
+    paddingTop: "20px",
+    paddingBottom: "20px",
+    paddingLeft: "20px",
+    paddingRight: "20px",
+    backgroundColor: tokens.colorNeutralBackground1,
   },
 });
 
@@ -41,6 +42,7 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   onInsertSlide,
   onInsertAll,
   selectedValues,
+  insertedSlideIndexes,
 }) => {
   const styles = useStyles();
   const endRef = useRef<HTMLDivElement>(null);
@@ -72,18 +74,34 @@ const ChatContainer: React.FC<ChatContainerProps> = ({
   return (
     <div className={styles.container} ref={containerRef}>
       {messages.map((msg, idx) => (
-        <ChatMessageComponent
-          key={msg.id}
-          message={msg}
-          isLatestAssistant={idx === lastAssistantIdx}
-          onOptionSelect={(option) => onOptionSelect(msg.id, option)}
-          onOtherSubmit={(text) => onOtherSubmit(msg.id, text)}
-          selectedValue={selectedValues[msg.id]}
-        />
+        <React.Fragment key={msg.id}>
+          <ChatMessageComponent
+            message={msg}
+            isLatestAssistant={idx === lastAssistantIdx}
+            onOptionSelect={(option) => onOptionSelect(msg.id, option)}
+            onOtherSubmit={(text) => onOtherSubmit(msg.id, text)}
+            selectedValue={selectedValues[msg.id]}
+          />
+          {/* Render slides inline with the message that generated them */}
+          {msg.slides && msg.slides.length > 0 && (
+            <OutputPreview
+              slides={msg.slides}
+              onInsertSlide={onInsertSlide}
+              onInsertAll={onInsertAll}
+              insertedSlideIndexes={insertedSlideIndexes}
+            />
+          )}
+        </React.Fragment>
       ))}
       {isTyping && <TypingIndicator />}
-      {slides.length > 0 && (
-        <OutputPreview slides={slides} onInsertSlide={onInsertSlide} onInsertAll={onInsertAll} />
+      {/* Only show slides at bottom if no message has claimed them (backwards compatibility) */}
+      {slides.length > 0 && !messages.some((m) => m.slides && m.slides.length > 0) && (
+        <OutputPreview
+          slides={slides}
+          onInsertSlide={onInsertSlide}
+          onInsertAll={onInsertAll}
+          insertedSlideIndexes={insertedSlideIndexes}
+        />
       )}
       <div ref={endRef} />
     </div>

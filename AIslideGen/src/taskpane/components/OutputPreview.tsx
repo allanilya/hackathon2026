@@ -9,91 +9,114 @@ export interface GeneratedSlide {
 
 interface OutputPreviewProps {
   slides: GeneratedSlide[];
-  onInsertSlide: (slide: GeneratedSlide) => void;
+  onInsertSlide: (slide: GeneratedSlide, index: number) => void;
   onInsertAll: () => void;
+  insertedSlideIndexes?: Set<number>;
 }
 
 const useStyles = makeStyles({
   wrapper: {
-    paddingLeft: "16px",
-    paddingRight: "16px",
-    paddingTop: "16px",
-    paddingBottom: "16px",
+    padding: "0",
     display: "flex",
     flexDirection: "column",
-    gap: "12px",
+    gap: "14px",
   },
   headerRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
+    marginBottom: "6px",
   },
   heading: {
-    fontSize: tokens.fontSizeBase400,
+    fontSize: "16px",
     fontWeight: tokens.fontWeightSemibold,
+    color: tokens.colorNeutralForeground1,
   },
   card: {
-    padding: "12px",
+    padding: "16px",
+    backgroundColor: tokens.colorNeutralBackground3,
+    border: `1px solid ${tokens.colorNeutralStroke1}`,
+    borderRadius: "12px",
   },
   bulletList: {
     margin: "0",
+    marginTop: "12px",
     paddingLeft: "20px",
   },
   bullet: {
-    fontSize: tokens.fontSizeBase300,
-    paddingBottom: "4px",
+    fontSize: "13px",
+    paddingBottom: "6px",
+    color: tokens.colorNeutralForeground2,
+    lineHeight: "1.5",
   },
   cardActions: {
     display: "flex",
     justifyContent: "flex-end",
-    paddingTop: "8px",
+    paddingTop: "12px",
   },
 });
 
 const OutputPreview: React.FC<OutputPreviewProps> = (props: OutputPreviewProps) => {
-  const { slides, onInsertSlide, onInsertAll } = props;
+  const { slides, onInsertSlide, onInsertAll, insertedSlideIndexes } = props;
   const styles = useStyles();
 
   if (slides.length === 0) {
     return null;
   }
 
+  // Check if all slides have been inserted
+  const allInserted = insertedSlideIndexes && insertedSlideIndexes.size === slides.length;
+
   return (
     <div className={styles.wrapper}>
       <div className={styles.headerRow}>
         <Text className={styles.heading}>Generated Slides ({slides.length})</Text>
-        <Button appearance="primary" icon={<ArrowDownload24Regular />} onClick={onInsertAll} size="small">
-          Insert All
-        </Button>
+        {!allInserted && (
+          <Button appearance="primary" icon={<ArrowDownload24Regular />} onClick={onInsertAll} size="small">
+            Insert All
+          </Button>
+        )}
       </div>
-      {slides.map((slide, index) => (
-        <Card key={index} className={styles.card}>
-          <CardHeader
-            header={
-              <Text weight="semibold">
-                {index + 1}. {slide.title}
-              </Text>
-            }
-          />
-          <ul className={styles.bulletList}>
-            {slide.bullets.map((bullet, bIndex) => (
-              <li key={bIndex} className={styles.bullet}>
-                {bullet}
-              </li>
-            ))}
-          </ul>
-          <div className={styles.cardActions}>
-            <Button
-              appearance="subtle"
-              icon={<SlideAdd24Regular />}
-              onClick={() => onInsertSlide(slide)}
-              size="small"
-            >
-              Insert
-            </Button>
-          </div>
-        </Card>
-      ))}
+      {slides.map((slide, index) => {
+        const isInserted = insertedSlideIndexes?.has(index);
+        return (
+          <Card
+            key={index}
+            className={styles.card}
+            style={{
+              opacity: isInserted ? 0.5 : 1,
+              backgroundColor: isInserted ? tokens.colorNeutralBackground3 : undefined,
+            }}
+          >
+            <CardHeader
+              header={
+                <Text weight="semibold">
+                  {isInserted && "✓ "}
+                  {index + 1}. {slide.title}
+                </Text>
+              }
+            />
+            <ul className={styles.bulletList}>
+              {slide.bullets.map((bullet, bIndex) => (
+                <li key={bIndex} className={styles.bullet}>
+                  {bullet}
+                </li>
+              ))}
+            </ul>
+            <div className={styles.cardActions}>
+              <Button
+                appearance="subtle"
+                icon={<SlideAdd24Regular />}
+                onClick={() => onInsertSlide(slide, index)}
+                size="small"
+                disabled={isInserted}
+              >
+                {isInserted ? "Inserted" : "Insert"}
+              </Button>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 };

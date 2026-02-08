@@ -263,6 +263,7 @@ export async function goToSlide(slideNumber: number): Promise<void> {
   });
 }
 
+
 // Tracking state
 let isTracking = false;
 let trackingCallback: (() => void) | null = null;
