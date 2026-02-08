@@ -9,7 +9,7 @@ import { indexMessage, indexSlides, retrieveContext, seedConversation } from "./
 dotenv.config();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: "100mb" }));
 app.use(cors({ origin: "https://localhost:3000" }));
 
 // ChatOpenAI for slide generation and summarization (temperature 0.7)
@@ -345,6 +345,108 @@ app.post("/api/fetch-article", async (req, res) => {
 
     const message = error instanceof Error ? error.message : "Article fetch failed";
     res.status(500).json({ error: `Failed to fetch article: ${message}` });
+  }
+});
+
+app.post("/api/analyze-image", async (req, res) => {
+  const { image, text, slideCount } = req.body as {
+    image: { base64: string; mimeType: string };
+    text?: string;
+    slideCount?: number;
+  };
+
+  if (!image || !image.base64) {
+    res.status(400).json({ error: "image is required" });
+    return;
+  }
+
+  console.log("[Image Analysis] Received image request", { hasText: !!text, slideCount });
+
+  try {
+    // Convert base64 to data URL for LangChain
+    const imageUrl = `data:${image.mimeType};base64,${image.base64}`;
+
+    // If text and slideCount are provided, generate slides
+    if (text && slideCount) {
+      console.log("[Image Analysis] Generating slides from image + text");
+      
+      const systemPrompt = `You are a presentation expert. Create slides based on the provided image and user's text input. Each slide must contain specific, valuable information - not generic statements. Use clear titles and 3-5 concise, informative bullet points. Avoid meta-commentary or process descriptions.
+
+Respond ONLY with valid JSON in this exact format:
+{ "slides": [{ "title": "Slide Title", "bullets": ["Point 1", "Point 2", "Point 3"] }] }
+
+Generate exactly ${slideCount} slides. Do not include any text outside the JSON.`;
+
+      const userMessage = text || "Create a presentation based on this image.";
+
+      // Create message with image - LangChain supports images in content array
+      const messages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage({
+          content: [
+            { type: "text", text: userMessage },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        } as any), // Type assertion needed for multimodal content
+      ];
+
+      const response = await generateModel.invoke(messages);
+      const content = typeof response.content === "string" ? response.content : "";
+
+      // Extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        res.status(500).json({ error: "Failed to parse AI response" });
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log("[Image Analysis] Generated slides:", JSON.stringify(parsed, null, 2));
+      res.json(parsed);
+    } else {
+      // Image only: analyze and generate questions
+      console.log("[Image Analysis] Analyzing image only");
+      
+      const systemPrompt = `You are a presentation expert. Analyze the provided image and:
+1. Provide a brief analysis of what you see in the image (2-3 sentences)
+2. Generate 3-5 specific questions that would help create a meaningful presentation about this image
+
+Respond ONLY with valid JSON in this exact format:
+{
+  "analysis": "Brief description of what's in the image...",
+  "questions": ["Question 1?", "Question 2?", "Question 3?"]
+}
+
+Do not include any text outside the JSON.`;
+
+      const messages = [
+        new SystemMessage(systemPrompt),
+        new HumanMessage({
+          content: [
+            { type: "text", text: "Analyze this image and suggest questions for creating a presentation." },
+            { type: "image_url", image_url: { url: imageUrl } },
+          ],
+        } as any), // Type assertion needed for multimodal content
+      ];
+
+      const response = await generateModel.invoke(messages);
+      const content = typeof response.content === "string" ? response.content : "";
+
+      // Extract JSON from the response
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        res.status(500).json({ error: "Failed to parse AI response" });
+        return;
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log("[Image Analysis] Analysis result:", JSON.stringify(parsed, null, 2));
+      res.json(parsed);
+    }
+  } catch (error: unknown) {
+    console.error("[Image Analysis] Error:", error);
+    const message = error instanceof Error ? error.message : "Image analysis failed";
+    res.status(500).json({ error: message });
   }
 });
 
